@@ -9,6 +9,8 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') }, dedupe: ['three', 'react', 'react-dom'] },
   server: {
     port: 5173,
+    // Inside Docker (VITE_API_PROXY is set by compose) bind-mount file events are unreliable on macOS.
+    watch: process.env.VITE_API_PROXY ? { usePolling: true, interval: 300 } : undefined,
     proxy: {
       '/api': { target: process.env.VITE_API_PROXY || 'http://localhost:8000', changeOrigin: true },
     },

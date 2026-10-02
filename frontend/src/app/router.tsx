@@ -25,6 +25,8 @@ const Tasks = lazy(() => import('@/pages/Tasks'))
 const Assistant = lazy(() => import('@/pages/Assistant'))
 const Profile = lazy(() => import('@/pages/Profile'))
 const Admin = lazy(() => import('@/pages/Admin'))
+// Dev-only preview of every sky state; the import is dropped from production builds.
+const SkyGallery = import.meta.env.DEV ? lazy(() => import('@/features/sky/SkyGallery')) : null
 
 const s = (el: ReactNode) => <Suspense fallback={<PageSpinner />}>{el}</Suspense>
 
@@ -68,5 +70,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
+  ...(SkyGallery ? [{ path: '/dev/sky', element: s(<SkyGallery />) }] : []),
   { path: '*', element: <Navigate to="/" replace /> },
 ])

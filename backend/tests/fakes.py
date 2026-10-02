@@ -38,18 +38,23 @@ def daily_block(start: date, days: int, rain_on: dict[date, float] | None = None
 
 
 def forecast_payload(today: date, lat: float = 10.79, lon: float = 79.14, rain_on: dict | None = None) -> dict:
-    hours = [datetime(today.year, today.month, today.day) + timedelta(hours=h) for h in range(-24, 72)]
+    hours = [datetime(today.year, today.month, today.day) + timedelta(hours=h) for h in range(-24, 96)]
     return {
-        "latitude": lat, "longitude": lon, "timezone": "Asia/Kolkata",
-        "current": {"time": f"{today}T10:00", "temperature_2m": 30.1, "apparent_temperature": 34.0,
+        "latitude": lat, "longitude": lon, "timezone": "Asia/Kolkata", "utc_offset_seconds": 19800,
+        "current": {"time": f"{today}T10:00", "interval": 900, "temperature_2m": 30.1, "apparent_temperature": 34.0,
                     "relative_humidity_2m": 70, "precipitation": 0.0, "cloud_cover": 40, "wind_speed_10m": 11.0,
                     "wind_direction_10m": 210, "wind_gusts_10m": 22.0, "surface_pressure": 1008.0, "is_day": 1,
-                    "weather_code": 2},
+                    "weather_code": 2, "visibility": 13000.0, "rain": 0.0, "showers": 0.0, "snowfall": 0.0,
+                    "cloud_cover_low": 30, "cloud_cover_mid": 15, "cloud_cover_high": 5},
         "hourly": {
             "time": [h.strftime("%Y-%m-%dT%H:%M") for h in hours],
             "temperature_2m": [28.0] * len(hours), "precipitation": [0.0] * len(hours),
             "precipitation_probability": [10] * len(hours), "wind_speed_10m": [10.0] * len(hours),
             "cloud_cover": [40] * len(hours), "relative_humidity_2m": [70] * len(hours),
+            "weather_code": [2] * len(hours), "visibility": [12000.0] * len(hours), "rain": [0.0] * len(hours),
+            "showers": [0.0] * len(hours), "cloud_cover_low": [30] * len(hours), "cloud_cover_mid": [15] * len(hours),
+            "cloud_cover_high": [5] * len(hours), "wind_direction_10m": [210] * len(hours),
+            "wind_gusts_10m": [20.0] * len(hours), "is_day": [1 if 6 <= h.hour < 18 else 0 for h in hours],
         },
         "daily": daily_block(today - timedelta(days=7), 23, rain_on),
     }

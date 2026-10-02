@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     soilgrids_url: str = "https://rest.isric.org/soilgrids/v2.0/properties/query"
     nominatim_url: str = "https://nominatim.openstreetmap.org"
 
-    weather_cache_minutes: int = 30
+    weather_cache_minutes: int = 10  # live conditions; Open-Meteo current updates every 15 min
     soil_cache_days: int = 30
     climatology_years: int = 10
     worker_interval_s: int = 3600

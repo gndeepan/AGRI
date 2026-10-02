@@ -13,11 +13,14 @@ ATTRIBUTION = "Weather data by Open-Meteo.com"
 CURRENT_VARS = [
     "temperature_2m", "apparent_temperature", "relative_humidity_2m", "precipitation", "cloud_cover",
     "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "surface_pressure", "is_day", "weather_code",
+    "visibility", "rain", "showers", "snowfall", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
 ]
 HOURLY_VARS = [
     "temperature_2m", "precipitation", "precipitation_probability", "wind_speed_10m", "cloud_cover",
-    "relative_humidity_2m",
+    "relative_humidity_2m", "weather_code", "visibility", "rain", "showers", "cloud_cover_low", "cloud_cover_mid",
+    "cloud_cover_high", "wind_direction_10m", "wind_gusts_10m", "is_day",
 ]
+HOURLY_WINDOW = 72  # hours from now returned in the bundle
 DAILY_VARS = [
     "temperature_2m_min", "temperature_2m_max", "temperature_2m_mean", "precipitation_sum",
     "precipitation_hours", "precipitation_probability_max", "wind_speed_10m_max", "wind_gusts_10m_max",
@@ -74,6 +77,7 @@ def normalize_forecast(payload: dict[str, Any]) -> dict[str, Any]:
     cur = payload.get("current", {})
     current = {
         "time": cur.get("time"),
+        "interval_s": cur.get("interval"),  # current sums (rain, showers) cover this many seconds
         "temperature_c": cur.get("temperature_2m"),
         "feels_like_c": cur.get("apparent_temperature"),
         "humidity_pct": cur.get("relative_humidity_2m"),
@@ -85,6 +89,13 @@ def normalize_forecast(payload: dict[str, Any]) -> dict[str, Any]:
         "pressure_hpa": cur.get("surface_pressure"),
         "is_day": bool(cur.get("is_day", 1)),
         "weather_code": cur.get("weather_code"),
+        "visibility_m": cur.get("visibility"),
+        "rain_mm": cur.get("rain"),
+        "showers_mm": cur.get("showers"),
+        "snowfall_cm": cur.get("snowfall"),
+        "cloud_cover_low_pct": cur.get("cloud_cover_low"),
+        "cloud_cover_mid_pct": cur.get("cloud_cover_mid"),
+        "cloud_cover_high_pct": cur.get("cloud_cover_high"),
     }
     hourly_block = payload.get("hourly", {})
     times = hourly_block.get("time", [])
@@ -99,12 +110,23 @@ def normalize_forecast(payload: dict[str, Any]) -> dict[str, Any]:
             "wind_speed_kmh": _col(hourly_block, "wind_speed_10m", i),
             "cloud_cover_pct": _col(hourly_block, "cloud_cover", i),
             "humidity_pct": _col(hourly_block, "relative_humidity_2m", i),
+            "weather_code": _col(hourly_block, "weather_code", i),
+            "visibility_m": _col(hourly_block, "visibility", i),
+            "rain_mm": _col(hourly_block, "rain", i),
+            "showers_mm": _col(hourly_block, "showers", i),
+            "cloud_cover_low_pct": _col(hourly_block, "cloud_cover_low", i),
+            "cloud_cover_mid_pct": _col(hourly_block, "cloud_cover_mid", i),
+            "cloud_cover_high_pct": _col(hourly_block, "cloud_cover_high", i),
+            "wind_direction_deg": _col(hourly_block, "wind_direction_10m", i),
+            "wind_gusts_kmh": _col(hourly_block, "wind_gusts_10m", i),
+            "is_day": None if _col(hourly_block, "is_day", i) is None else bool(_col(hourly_block, "is_day", i)),
         }
-        for i in range(start, min(start + 48, len(times)))
+        for i in range(start, min(start + HOURLY_WINDOW, len(times)))
     ]
     today = date.fromisoformat(cur["time"][:10]) if cur.get("time") else None
     return {
         "timezone": payload.get("timezone", "UTC"),
+        "utc_offset_seconds": payload.get("utc_offset_seconds", 0),
         "location": {"lat": payload.get("latitude"), "lon": payload.get("longitude")},
         "current": current,
         "hourly": hourly,

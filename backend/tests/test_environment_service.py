@@ -26,7 +26,7 @@ def test_forecast_is_cached_with_ttl():
     assert wx.forecast_calls == 1
     assert first["provenance"]["cache_status"] == "fresh" and second["provenance"]["cache_status"] == "cached"
     ttl = get_redis().ttl("wx:fc:10.79:79.14")
-    assert 0 < ttl <= 30 * 60
+    assert 0 < ttl <= 10 * 60
 
 
 def test_forecast_expiry_triggers_refetch():

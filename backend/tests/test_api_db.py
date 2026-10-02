@@ -108,7 +108,7 @@ def test_environment_endpoints(api):
     register(c)
     land = make_land(c)
     wx = c.get(f"/api/v1/lands/{land['id']}/weather").json()
-    assert wx["provenance"]["kind"] == "forecast" and len(wx["hourly"]) == 48
+    assert wx["provenance"]["kind"] == "forecast" and len(wx["hourly"]) == 72
     soil = c.get(f"/api/v1/lands/{land['id']}/soil").json()
     assert soil["texture_class"] == "clay" and soil["soil_tests"] == []
     r = c.post(f"/api/v1/lands/{land['id']}/soil-tests", json={"sample_date": "2026-05-01", "ph": 6.4, "texture": "clay loam"})

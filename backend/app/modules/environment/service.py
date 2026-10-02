@@ -132,6 +132,7 @@ class EnvironmentService:
         return {
             "location": normalized["location"],
             "timezone": normalized["timezone"],
+            "utc_offset_seconds": normalized.get("utc_offset_seconds", 0),
             "current": normalized["current"],
             "hourly": normalized["hourly"],
             "daily": normalized["daily"],

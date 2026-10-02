@@ -286,3 +286,11 @@ docker-compose.yml, .env.example, Makefile
   * `POST /notifications/{id}/read`
 * `TimelineDay.weather` is `null` for a date when every provider is down. The crop model then uses its 28 °C reference temperature for that day and widens uncertainty.
 * Assistant messages also return `confirmed_actions: number[]` and `created_at`.
+
+## 8. Live sky (weather visualisation)
+
+* `WeatherBundle` additions (all additive): `utc_offset_seconds`; `current.interval_s`, `visibility_m`, `rain_mm`, `showers_mm`, `snowfall_cm`, `cloud_cover_low_pct`, `cloud_cover_mid_pct`, `cloud_cover_high_pct`; each `hourly` row also has `weather_code`, `visibility_m`, `rain_mm`, `showers_mm`, `cloud_cover_low/mid/high_pct`, `wind_direction_deg`, `wind_gusts_kmh`, `is_day`. `hourly` now covers 72 hours from now. Live weather is cached for 10 minutes; `provenance.retrieved_at` drives the "updated hh:mm" label.
+* `frontend/src/features/sky/`: `toSkyParams(weather, {lat, lon, date})` maps a current or hourly row to sky inputs (pure, tested). `createSkyRenderer(canvas)` is a headless WebGL2 renderer with `render(params, timeSeconds, opts)` and `lightProbe(params)` (key light direction/colour, ambient, fog) so a 3D scene can be lit by the same sky. `<LiveSky params glass sound />` wraps it with pause-when-hidden, reduced-motion and a CSS-gradient fallback.
+* Honesty rules: lightning is drawn only for WMO thunderstorm codes 95/96/99; rain only when the model reports precipitation or a rain code; the strike timing and position are simulated. The UI states that this is model data, not radar or lightning sensors.
+* Photosensitivity: at most one lightning event per 2.4 s, capped flash brightness, and no flashes at all under `prefers-reduced-motion`.
+* Dev gallery of every state: `/dev/sky` (development builds only), `?only=<key>`, `&bolt=1`.

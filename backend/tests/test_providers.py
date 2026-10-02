@@ -24,12 +24,29 @@ def test_forecast_normalization_tags_past_and_future():
     result = wx.forecast(10.79, 79.14)
     n = result.normalized
     assert n["current"]["temperature_c"] == 30.1 and n["current"]["is_day"] is True
-    assert len(n["hourly"]) == 48 and n["hourly"][0]["time"].startswith(f"{TODAY}T10")
+    assert len(n["hourly"]) == 72 and n["hourly"][0]["time"].startswith(f"{TODAY}T10")
     kinds = {d["date"]: d["kind"] for d in n["daily"]}
     assert kinds[(TODAY - timedelta(days=1)).isoformat()] == "observed"
     assert kinds[TODAY.isoformat()] == "forecast"
     assert result.license == "CC BY 4.0"
     assert provider_health_snapshot("open-meteo-forecast")["calls"] == 1
+
+
+@respx.mock
+def test_forecast_requests_and_normalizes_sky_variables():
+    route = respx.get(get_settings().open_meteo_forecast_url).mock(
+        return_value=httpx.Response(200, json=forecast_payload(TODAY)))
+    n = OpenMeteoWeather(client=client("open-meteo-forecast")).forecast(10.79, 79.14).normalized
+    params = route.calls.last.request.url.params
+    for var in ("visibility", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "rain", "showers"):
+        assert var in params["current"].split(",") and var in params["hourly"].split(",")
+    assert {"weather_code", "is_day", "wind_direction_10m", "wind_gusts_10m"} <= set(params["hourly"].split(","))
+    cur = n["current"]
+    assert cur["visibility_m"] == 13000.0 and cur["cloud_cover_low_pct"] == 30 and cur["rain_mm"] == 0.0
+    assert cur["interval_s"] == 900 and n["utc_offset_seconds"] == 19800
+    first, night = n["hourly"][0], n["hourly"][10]  # 10:00 and 20:00 (synthetic)
+    assert first["weather_code"] == 2 and first["visibility_m"] == 12000.0 and first["is_day"] is True
+    assert night["is_day"] is False and night["wind_direction_deg"] == 210
 
 
 @respx.mock

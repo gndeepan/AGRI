@@ -34,6 +34,7 @@ import { DataKindBadge, ProvenanceBadge } from '@/components/common/DataKindBadg
 import { AlertList } from '@/components/common/AlertList'
 import { FormField } from '@/components/common/Field'
 import { WeatherIcon, weatherCodeKey } from '@/components/common/WeatherIcon'
+import { WeatherNowCard } from '@/features/sky/WeatherNowCard'
 import { soilTestSchema } from '@/lib/schemas'
 import { formatDate, formatNumber, windDirLabel } from '@/lib/format'
 
@@ -63,7 +64,10 @@ export default function Environment() {
           ) : weather.isError ? (
             <ErrorState error={weather.error} onRetry={() => weather.refetch()} />
           ) : (
-            <WeatherSection w={weather.data} />
+            <div className="space-y-5">
+              {landId && <WeatherNowCard landId={landId} showLink={false} />}
+              <WeatherSection w={weather.data} />
+            </div>
           )}
         </TabsContent>
         <TabsContent value="soil">

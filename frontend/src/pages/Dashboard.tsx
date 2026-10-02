@@ -2,7 +2,7 @@ import { Suspense, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
-import { ArrowRight, CalendarCheck, Droplets, Layers, Map, Plus, Sprout, Wind } from 'lucide-react'
+import { ArrowRight, CalendarCheck, Layers, Map, Plus, Sprout } from 'lucide-react'
 import { useDashboard, useUpdateTask } from '@/api/queries'
 import type { CycleDetail, TaskOut } from '@/api/types'
 import { useAuth } from '@/stores/auth'
@@ -13,9 +13,10 @@ import { CardSkeleton, EmptyState, ErrorState } from '@/components/common/States
 import { PageHeader, Stat } from '@/components/common/PageHeader'
 import { AlertList } from '@/components/common/AlertList'
 import { DataKindBadge } from '@/components/common/DataKindBadge'
-import { WeatherIcon, weatherCodeKey } from '@/components/common/WeatherIcon'
+import { WeatherIcon } from '@/components/common/WeatherIcon'
 import { FieldThumb } from '@/components/common/FieldThumb'
-import { formatArea, formatDate, formatNumber, i18nText, windDirLabel } from '@/lib/format'
+import { formatArea, formatDate, formatNumber, i18nText } from '@/lib/format'
+import { WeatherNowCard } from '@/features/sky/WeatherNowCard'
 import { GlobeZoom, TAMIL_NADU_BBOX, type GlobeField } from '@/features/globe'
 
 function greetingKey() {
@@ -69,7 +70,8 @@ export default function Dashboard() {
         />
       ) : (
         <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
+            <DashboardWeather fields={d.fields} initialLandId={d.weather_today?.land_id} />
             <WeatherCard data={d.weather_today} />
             <Card>
               <CardHeader className="flex-row items-center justify-between">
@@ -182,30 +184,18 @@ function CycleRow({ c }: { c: CycleDetail }) {
   )
 }
 
+function DashboardWeather({ fields, initialLandId }: { fields: DashboardData['fields']; initialLandId?: string }) {
+  const [landId, setLandId] = useState(initialLandId ?? fields[0]?.id)
+  if (!landId) return null
+  return <WeatherNowCard landId={landId} fields={fields} onLandChange={setLandId} />
+}
+
+/** 7-day outlook; current conditions live in the sky card above. */
 function WeatherCard({ data }: { data: import('@/api/types').Dashboard['weather_today'] }) {
   const { t, i18n } = useTranslation()
   if (!data) return null
-  const c = data.current
   return (
     <Card className="overflow-hidden">
-      <div className="bg-gradient-to-br from-sky-deep to-paddy-800 p-5 text-soil-50">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-widest opacity-80">{t('weather.now')}</div>
-            <div className="mt-1 flex items-end gap-3">
-              <span className="font-display text-5xl font-semibold tabular-nums">{Math.round(c.temperature_c)}°</span>
-              <span className="pb-2 text-sm opacity-90">{t('weather.feelsLike', { v: Math.round(c.feels_like_c) })}</span>
-            </div>
-            <div className="text-sm opacity-90">{t(`weather.codes.${weatherCodeKey(c.weather_code)}`)}</div>
-          </div>
-          <WeatherIcon code={c.weather_code} isDay={c.is_day} className="size-14 opacity-90" />
-        </div>
-        <div className="mt-4 flex flex-wrap gap-4 text-sm">
-          <span className="inline-flex items-center gap-1"><Droplets className="size-4" /> {c.humidity_pct}%</span>
-          <span className="inline-flex items-center gap-1"><Wind className="size-4" /> {formatNumber(c.wind_speed_kmh, 0)} km/h {windDirLabel(c.wind_direction_deg)}</span>
-          <span>{t('weather.rainNow', { v: formatNumber(c.precipitation_mm, 1) })}</span>
-        </div>
-      </div>
       <CardContent className="no-scrollbar flex gap-2 overflow-x-auto pt-4">
         {data.daily.filter((d) => d.kind !== 'observed').slice(0, 7).map((d) => (
           <div key={d.date} className="flex min-w-[72px] flex-col items-center gap-1 rounded-xl bg-muted/60 p-2 text-xs">

@@ -168,6 +168,7 @@
     "harvestWindow": "Harvest window",
     "fullWeather": "Full weather"
   },
+  "sky": {"cardLabel": "Live weather at your field", "nowAt": "Now at your field", "atTime": "Forecast for {{time}}, day {{day}}", "backToNow": "Back to now", "selectField": "Choose field", "highLow": "H {{h}}° · L {{l}}°", "rainChance": "Rain chance {{v}}%", "rainRate": "Rain {{v}} mm/h", "humidity": "Humidity {{v}}%", "hourly": "Hourly forecast", "soundOn": "Turn weather sound on", "soundOff": "Turn weather sound off", "soundResume": "Turn weather sound back on", "provenance": "Live model data · Open-Meteo · updated {{time}}", "stale": "showing the last saved forecast", "notRadar": "From weather models, not radar or lightning sensors.", "unavailable": "Weather is unavailable right now.", "offline": "You are offline. Weather will load when you reconnect."},
   "weather": {
     "now": "Now",
     "feelsLike": "Feels like {{v}}°",

@@ -121,6 +121,16 @@ export interface WeatherCurrent {
   pressure_hpa: number
   is_day: boolean
   weather_code: number
+  /** Added for the live sky; optional because older cached bundles may lack them. */
+  /** Seconds covered by the precipitation sums (Open-Meteo current: 900). */
+  interval_s?: number | null
+  visibility_m?: number | null
+  rain_mm?: number | null
+  showers_mm?: number | null
+  snowfall_cm?: number | null
+  cloud_cover_low_pct?: number | null
+  cloud_cover_mid_pct?: number | null
+  cloud_cover_high_pct?: number | null
 }
 
 export type WeatherDayKind = 'observed' | 'forecast' | 'climatology'
@@ -152,6 +162,16 @@ export interface WeatherHourly {
   wind_speed_kmh: number
   cloud_cover_pct: number
   humidity_pct: number
+  weather_code?: number | null
+  visibility_m?: number | null
+  rain_mm?: number | null
+  showers_mm?: number | null
+  cloud_cover_low_pct?: number | null
+  cloud_cover_mid_pct?: number | null
+  cloud_cover_high_pct?: number | null
+  wind_direction_deg?: number | null
+  wind_gusts_kmh?: number | null
+  is_day?: boolean | null
 }
 
 export interface Alert {
@@ -170,6 +190,8 @@ export interface Alert {
 export interface WeatherBundle {
   location: LatLon
   timezone: string
+  /** Offset of the field's local time from UTC; hourly/current times are local wall-clock strings. */
+  utc_offset_seconds?: number
   current: WeatherCurrent
   hourly: WeatherHourly[]
   daily: WeatherDaily[]
