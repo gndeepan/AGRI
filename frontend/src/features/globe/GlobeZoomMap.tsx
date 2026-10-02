@@ -214,6 +214,7 @@ export default function GlobeZoomMap({
         zoom: 1.2,
         interactive,
         maxPitch: small ? 45 : 70,
+        maxZoom: 18.5,
         // Background mode can't open the compact (i) button, so show credits in full.
         attributionControl: { compact: interactive },
         fadeDuration: 0,

@@ -6,6 +6,9 @@ import type { MapLayer } from '@/stores/ui'
  * features and field layers survive (setStyle would wipe them).
  * Licensing: see docs/DATA_SOURCES.md — attribution is shown in the map control.
  */
+/** Deepest zoom with real Esri imagery in our region (probed: z19 is a placeholder tile). */
+export const ESRI_MAX_IMAGERY_ZOOM = 18
+
 export const BASE_LAYERS: Record<MapLayer, string[]> = {
   satellite: ['esri-imagery', 'esri-labels'],
   street: ['osm'],
@@ -20,14 +23,16 @@ export const baseStyle: StyleSpecification = {
       type: 'raster',
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
       tileSize: 256,
-      maxzoom: 19,
+      // Esri returns a "Map data not yet available" placeholder past its deepest imagery
+      // (z18 across most of Tamil Nadu). Capping here makes MapLibre overzoom the z18 tile.
+      maxzoom: ESRI_MAX_IMAGERY_ZOOM,
       attribution: 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community',
     },
     'esri-labels': {
       type: 'raster',
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
       tileSize: 256,
-      maxzoom: 19,
+      maxzoom: ESRI_MAX_IMAGERY_ZOOM,
     },
     osm: {
       type: 'raster',

@@ -120,7 +120,7 @@ export default function LandMap() {
         center: DEFAULT_CENTER,
         zoom: DEFAULT_ZOOM,
         attributionControl: { compact: true },
-        maxZoom: 20,
+        maxZoom: 19, // imagery is overzoomed past z18; beyond 19 it only gets blurrier
       })
     } catch {
       setMapFailed(true)
