@@ -2,9 +2,11 @@ import { AdaptiveDpr, OrbitControls, PerformanceMonitor } from '@react-three/dre
 import { Canvas, useThree } from '@react-three/fiber';
 import { Bloom, DepthOfField, EffectComposer, N8AO, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import * as THREE from 'three';
 import { useAmbientSound } from './audio';
+import { cropVisual, genericStageIndex } from './crops/cropGrowth';
+import { specFor } from './crops/specs';
 import { describeShape, fieldShapeFromPolygon, type FieldShape } from './fieldShape';
 import { growthParams } from './growth';
 import { detectQuality, SceneSettingsContext, usePrefersReducedMotion, type ResolvedQuality } from './quality';
@@ -20,6 +22,9 @@ import { Wildlife } from './scene/Wildlife';
 import { computeLighting } from './sky';
 import type { VirtualFieldProps } from './types';
 import { announceWebGLFailure, WebGLBoundary } from './WebGLBoundary';
+
+// Non-paddy crops: plant generators, tilled soil and birds load only when needed.
+const UplandScene = lazy(() => import('./crops/UplandScene'));
 
 const clamp01 = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
@@ -122,7 +127,9 @@ function Effects({ quality, focusDistance }: { quality: ResolvedQuality; focusDi
   );
 }
 
-export default function VirtualFieldCanvas({ state, quality = 'auto', soundEnabled = false, className, boundary }: VirtualFieldProps) {
+export default function VirtualFieldCanvas({
+  state, quality = 'auto', soundEnabled = false, className, boundary, cropSlug, irrigationMethod,
+}: VirtualFieldProps) {
   const container = useRef<HTMLDivElement>(null);
   const visible = useOnScreen(container);
   const reducedMotion = usePrefersReducedMotion();
@@ -144,6 +151,11 @@ export default function VirtualFieldCanvas({ state, quality = 'auto', soundEnabl
   const groundWet = clamp01(Math.max(state.groundWetness ?? 0, rain));
 
   const growth = useMemo(() => growthParams(state.stageKey, state.stageProgress), [state.stageKey, state.stageProgress]);
+  const upland = useMemo(() => specFor(cropSlug), [cropSlug]);
+  const uplandVisual = useMemo(
+    () => (upland ? cropVisual(upland, genericStageIndex(state.rawStageKey, state.stageKey), state.stageProgress) : null),
+    [upland, state.rawStageKey, state.stageKey, state.stageProgress],
+  );
   const lighting = useMemo(
     () => computeLighting(state.hourOfDay, state.sunrise, state.sunset, cloudCover, rain),
     [state.hourOfDay, state.sunrise, state.sunset, cloudCover, rain],
@@ -162,6 +174,7 @@ export default function VirtualFieldCanvas({ state, quality = 'auto', soundEnabl
   // Dew on leaves in the early morning, rain wetness otherwise.
   const dew = lighting.phase === 'dawn' || lighting.phase === 'golden_morning' ? 0.35 : 0;
   const leafWet = Math.max(groundWet, dew);
+  const flowering = uplandVisual ? Math.min(1, Math.max(0, uplandVisual.flower - uplandVisual.flowerDrop) * 2) : 0;
   const anthesis = state.stageKey === 'flowering' && state.hourOfDay > 8 && state.hourOfDay < 13 ? 1 - Math.abs(state.stageProgress - 0.4) : 0;
   const wildlife = lighting.daylight * (1 - rain) * (1 - cloudCover * 0.4);
   const fireflies = lighting.night * (1 - rain) * (resolved === 'high' ? 1 : 0.7);
@@ -190,7 +203,7 @@ export default function VirtualFieldCanvas({ state, quality = 'auto', soundEnabl
               announceWebGLFailure('context_lost');
             });
           }}
-          aria-label="Simulated paddy field visualisation"
+          aria-label={upland ? `Simulated ${upland.slug.replace('-', ' ')} field visualisation` : 'Simulated paddy field visualisation'}
         >
           <SceneSettingsContext.Provider value={settings}>
             <FieldContext.Provider value={field}>
@@ -205,14 +218,40 @@ export default function VirtualFieldCanvas({ state, quality = 'auto', soundEnabl
                 windSpeedKmh={windKmh}
                 humidityPct={state.humidityPct}
               />
-              <Ground waterLevel={waterLevel} soilWetness={soilWetness} surfaceWet={groundWet} growth={growth} windStrength={windStrength} />
-              <Crop growth={growth} windStrength={windStrength} windDirection={windDirection} wet={leafWet} anthesis={anthesis} />
+              {upland && uplandVisual ? (
+                <Suspense fallback={null}>
+                  <UplandScene
+                    spec={upland}
+                    visual={uplandVisual}
+                    windStrength={windStrength}
+                    windDirection={windDirection}
+                    leafWet={leafWet}
+                    groundWet={groundWet}
+                    irrigationMethod={irrigationMethod}
+                    activity={wildlife}
+                  />
+                </Suspense>
+              ) : (
+                <>
+                  <Ground waterLevel={waterLevel} soilWetness={soilWetness} surfaceWet={groundWet} growth={growth} windStrength={windStrength} />
+                  <Crop growth={growth} windStrength={windStrength} windDirection={windDirection} wet={leafWet} anthesis={anthesis} />
+                </>
+              )}
               <ScaleFigures viewFrom={framing.viewFrom} />
               <Backdrop />
               <Rain intensity={rain} windDirection={windDirection} windSpeedKmh={windKmh} />
-              <Splashes intensity={rain} />
+              {!upland && <Splashes intensity={rain} />}
               <Fireflies visibility={fireflies} />
-              <Wildlife activity={wildlife} canopyHeight={growth.heightM * growth.presence} wading={state.standingWater || growth.soilWetness > 0.8} />
+              {upland && uplandVisual ? (
+                <Wildlife
+                  activity={wildlife}
+                  canopyHeight={upland.heightM * uplandVisual.scale * uplandVisual.presence}
+                  wading={false}
+                  butterflies={flowering}
+                />
+              ) : (
+                <Wildlife activity={wildlife} canopyHeight={growth.heightM * growth.presence} wading={state.standingWater || growth.soilWetness > 0.8} />
+              )}
               <OrbitControls
                 makeDefault
                 enablePan={mode === 'orbit'}

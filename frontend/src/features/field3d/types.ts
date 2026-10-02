@@ -12,6 +12,8 @@ export interface FieldVisualState {
   groundWetness?: number;
   /** Mean relative humidity for the day, drives morning mist. */
   humidityPct?: number | null;
+  /** The crop model's own stage key (e.g. 'vegetative', 'yield_formation') for non-paddy crops. */
+  rawStageKey?: string | null;
 }
 export interface VirtualFieldProps {
   state: FieldVisualState;
@@ -20,4 +22,8 @@ export interface VirtualFieldProps {
   className?: string;
   /** The farmer's drawn field (EPSG:4326). When given, the scene is built at true shape and scale. */
   boundary?: Polygon;
+  /** Catalogue slug of the crop. Paddy (or omitted) renders the paddy scene; other crops their own plants. */
+  cropSlug?: string;
+  /** 'drip' adds laterals (and mulch on vegetable beds); 'flood'/'awd' keeps furrows damp. */
+  irrigationMethod?: string;
 }

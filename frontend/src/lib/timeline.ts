@@ -247,6 +247,7 @@ export function visualStateAt(timeline: TimelineDay[], position: number, opts: V
     weatherKind: a.weather?.kind ?? 'simulated',
     groundWetness,
     humidityPct: a.weather?.humidity_mean_pct ?? null,
+    rawStageKey: a.das < 0 && !a.stage_key ? null : a.stage_key ?? null,
   }
 }
 

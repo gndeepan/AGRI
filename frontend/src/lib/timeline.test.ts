@@ -83,6 +83,19 @@ describe('visualStateAt', () => {
   })
 })
 
+describe('non-paddy crops', () => {
+  const upland: TimelineDay[] = [day(0, 'vegetative', 0.4), day(1, 'yield_formation', 0.2), day(2, 'maturity', 0.9)]
+
+  it('passes the crop model\'s own stage key to the 3D scene', () => {
+    expect(visualStateAt(upland, 0.5, { cropSlug: 'maize' }).rawStageKey).toBe('vegetative')
+    expect(visualStateAt(upland, 1.2, { cropSlug: 'maize' }).rawStageKey).toBe('yield_formation')
+  })
+
+  it('never floods an upland field', () => {
+    for (const p of [0.2, 1.4, 2.6]) expect(visualStateAt(upland, p, { cropSlug: 'groundnut', irrigationMethod: 'flood' }).standingWater).toBe(false)
+  })
+})
+
 describe('weather-driven rain', () => {
   // Synthetic days: a 4-hour 12 mm forecast shower, a wet climatology day, a 0.4 mm trace day.
   const wet: TimelineDay[] = [

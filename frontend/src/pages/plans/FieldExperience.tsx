@@ -168,7 +168,6 @@ function SceneLayer({ cycle, timeline }: { cycle: CycleDetail; timeline: Timelin
     window.addEventListener(WEBGL_FAILED_EVENT, off)
     return () => window.removeEventListener(WEBGL_FAILED_EVENT, off)
   }, [])
-  const isPaddy = cycle.crop.slug === 'paddy' || cycle.crop.slug.includes('rice')
   const opts: VisualOptions = useMemo(
     () => ({ cropSlug: cycle.crop.slug, irrigationMethod: cycle.irrigation_method }),
     [cycle.crop.slug, cycle.irrigation_method],
@@ -177,20 +176,29 @@ function SceneLayer({ cycle, timeline }: { cycle: CycleDetail; timeline: Timelin
   const land = useLand(cycle.land_id)
   const position = useSimulation((s) => s.position)
   const state: FieldVisualState = useMemo(() => visualStateAt(timeline, position, opts), [timeline, position, opts])
-  const use3D = webgl && isPaddy
+  // Every plannable crop has a 3D scene; the 2D illustration is only the no-WebGL fallback.
+  const use3D = webgl
 
   return (
     <>
       {use3D ? (
         <Suspense fallback={<Field2D state={state} className="absolute inset-0" />}>
-          <VirtualField state={state} boundary={land.data?.boundary} quality={sceneQuality} soundEnabled={soundEnabled} className="absolute inset-0" />
+          <VirtualField
+            state={state}
+            boundary={land.data?.boundary}
+            cropSlug={cycle.crop.slug}
+            irrigationMethod={cycle.irrigation_method}
+            quality={sceneQuality}
+            soundEnabled={soundEnabled}
+            className="absolute inset-0"
+          />
         </Suspense>
       ) : (
         <Field2D state={state} className="absolute inset-0" />
       )}
       {!use3D && (
         <div className="absolute bottom-14 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-[11px] text-soil-50">
-          {!isPaddy ? t('field.paddyOnly3d') : t('field.noWebgl')}
+          {t('field.noWebgl')}
         </div>
       )}
     </>

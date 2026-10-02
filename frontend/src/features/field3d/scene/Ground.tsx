@@ -148,7 +148,7 @@ export function Ground({ waterLevel, soilWetness, surfaceWet, growth, windStreng
 }
 
 /** Earthen bunds (varappu) raised along every edge of the drawn field. */
-function Bunds() {
+export function Bunds() {
   const { shape } = useField();
   const { quality } = useSceneSettings();
   const soil = useMemo(() => {
@@ -176,7 +176,7 @@ function outwardNormal(shape: FieldShape, ax: number, az: number, bx: number, bz
   return [nx, nz];
 }
 
-function buildBundGeometry(shape: FieldShape): THREE.BufferGeometry {
+export function buildBundGeometry(shape: FieldShape): THREE.BufferGeometry {
   // Cross-section: offset outward from the field edge (m) and height (m).
   const profile: Array<[number, number]> = [[-0.02, -0.02], [0.16, BUND_H], [BUND_OUTER - 0.2, BUND_H + 0.02], [BUND_OUTER, -0.02]];
   const grass = new THREE.Color('#6f7a3c');
@@ -229,7 +229,7 @@ function buildBundGeometry(shape: FieldShape): THREE.BufferGeometry {
 }
 
 /** Wild grass on the bunds, swaying with the same wind as the crop. */
-function BundGrass() {
+export function BundGrass() {
   const { quality } = useSceneSettings();
   const { shape, wind } = useField();
   const perM = quality === 'high' ? 34 : 10;
@@ -281,13 +281,13 @@ function BundGrass() {
   return <primitive object={mesh} />;
 }
 
-interface Plot {
+export interface Plot {
   ring: Array<[number, number]>;
   variant: 'same' | 'younger' | 'flooded' | 'fallow' | 'stubble';
 }
 
 /** Neighbouring paddies laid out on the same orientation as the farmer's field. */
-function layoutPlots(shape: FieldShape): Plot[] {
+export function layoutPlots(shape: FieldShape): Plot[] {
   const rand = mulberry32(17);
   const ux = Math.cos(shape.rowAngle);
   const uz = Math.sin(shape.rowAngle);
@@ -327,7 +327,7 @@ function layoutPlots(shape: FieldShape): Plot[] {
   return plots;
 }
 
-function plotShape(ring: Array<[number, number]>): FieldShape {
+export function plotShape(ring: Array<[number, number]>): FieldShape {
   return {
     ring, holes: [], areaM2: 0, perimeterM: 0, rowAngle: 0, lengthM: 0, widthM: 0, center: [0, 0], radius: 0, synthetic: true,
   };

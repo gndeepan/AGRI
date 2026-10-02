@@ -13,17 +13,19 @@ interface WildlifeProps {
   canopyHeight: number;
   /** Egrets wade in standing water or short crop; they leave tall canopy alone. */
   wading: boolean;
+  /** 0..1 open flowers in the crop: brings extra butterflies (non-paddy crops). */
+  butterflies?: number;
 }
 
 /** Ambient, purely decorative wildlife. Hidden in rain and at night. */
-export function Wildlife({ activity, canopyHeight, wading }: WildlifeProps) {
+export function Wildlife({ activity, canopyHeight, wading, butterflies = 0 }: WildlifeProps) {
   const { quality } = useSceneSettings();
   if (activity < 0.05) return null;
   const high = quality === 'high';
   return (
     <group>
       <Flyers kind="dragonfly" count={high ? 5 : 2} canopyHeight={canopyHeight} seed={1} />
-      <Flyers kind="butterfly" count={high ? 4 : 1} canopyHeight={canopyHeight} seed={2} />
+      <Flyers kind="butterfly" count={(high ? 4 : 1) + Math.round(butterflies * (high ? 6 : 2))} canopyHeight={canopyHeight} seed={2} />
       <BirdFlock count={high ? 14 : 7} />
       {wading && canopyHeight < 0.6 && <Egrets count={high ? 5 : 3} canopyHeight={canopyHeight} />}
     </group>
