@@ -70,7 +70,8 @@ export function skyPalette(p: SkyParams): SkyPalette {
   const greyZ: RGB = scale([1, 1, 1], luma(k.zenith) * 0.95 + 0.04 * daylight)
   const greyH: RGB = scale([1, 1, 1], luma(k.horizon) * 0.95 + 0.05 * daylight)
   const desat = clamp01(p.overcast * 0.95 + p.cloudLow * 0.35 + p.fog * 0.6)
-  const dark = 1 - 0.38 * p.rainIntensity - 0.28 * p.thunder
+  // Rain clouds are thick: the heavier the rain, the darker the sky under them.
+  const dark = 1 - 0.55 * p.rainIntensity - 0.12 * p.thunder
   let zenith = scale(mix(k.zenith, greyZ, desat), dark)
   let horizon = scale(mix(k.horizon, greyH, desat * 0.9), dark)
 
@@ -81,9 +82,12 @@ export function skyPalette(p: SkyParams): SkyPalette {
   const sunVisibility = smooth(-1.5, 1.5, elev) * (1 - clamp01(p.overcast * 0.9 + p.fog * 0.8 + p.rainIntensity * 0.5))
 
   const cloudLit = mix(mix(hex('#3a4256'), hex('#fff7ec'), daylight), k.sun, (1 - smooth(4, 20, elev)) * daylight * 0.55)
+  // Around sunrise/sunset clouds catch the low sun from below and glow pink-orange.
+  const twilight = smooth(-10, -1, elev) * (1 - smooth(6, 14, elev)) * (1 - p.overcast * 0.7)
+  const cloudLitTw = mix(cloudLit, scale(mix(horizon, k.sun, 0.45), 1.2), twilight * 0.75)
   const cloudShadow = scale(mix(hex('#0d1220'), hex('#8a94a6'), daylight), 1 - 0.45 * p.rainIntensity - 0.3 * p.thunder)
 
-  return { zenith, horizon, sunColor: k.sun, sunVisibility, daylight, cloudLit, cloudShadow, fogColor, gloom }
+  return { zenith, horizon, sunColor: k.sun, sunVisibility, daylight, cloudLit: cloudLitTw, cloudShadow, fogColor, gloom }
 }
 
 /** Unit vector (east, up, north) for a compass azimuth and elevation, both in radians. */
