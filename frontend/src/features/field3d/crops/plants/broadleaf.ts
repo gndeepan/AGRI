@@ -1,32 +1,51 @@
 import * as THREE from 'three';
 import {
-  LEAF, PART, along, curvedPath, dirFrom, flower, hangMorph, leafOrgan, palmateLeaf, pinnateLeaf, stemOrgan, tangentAt, v3, type Ctx, type Organ,
+  LEAF, PART, along, bellFlower, curvedPath, dirFrom, flower, hangMorph, leafOrgan, palmateLeaf, pinnateLeaf, stemOrgan, tangentAt, v3, type Ctx, type Organ,
 } from './common';
 
 const fruitOrgan = (ctx: Ctx, pivot: THREE.Vector3, order: number, morph?: Organ['morph']): Organ => ({
   part: PART.FRUIT, order, color: ctx.spec.colors.fruit, color2: ctx.spec.colors.fruitRipe, pivot: pivot.clone(), morph,
 });
 
-/** Sesame: one erect stem, opposite lance leaves, tubular white-pink flowers then upright capsules. */
+/**
+ * Sesame: an erect stem with a few ascending branches, opposite leaves (broad below, lance
+ * above), white-pink bell flowers in the axils and upright four-sided capsules held close to the stem.
+ */
 export function sesame(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
-  const stem = curvedPath(v3(0, 0, 0), v3((rand() - 0.5) * 0.05, 1, (rand() - 0.5) * 0.05), H, 0.06, near ? 8 : 4);
-  b.tube(stem, (s) => 0.007 * (1 - 0.5 * s), 4, stemOrgan(ctx));
-  const nodes = near ? 9 : 5;
-  for (let k = 0; k < nodes; k++) {
-    const t = 0.08 + (k / nodes) * 0.88;
-    const p = along(stem, t);
-    for (const side of [0, Math.PI]) {
-      const yaw = k * 1.57 + side;
-      b.leaf(p, dirFrom(yaw, 0.35), leafOrgan(ctx, p, t * 0.92), { length: 0.11 * (1.1 - t * 0.5), width: 0.035, profile: LEAF.lance, segs: near ? 4 : 2, arch: 0.6, across: near ? 5 : 3, curl: 0.05 });
-      if (t > 0.45) {
-        const fp = p.clone().addScaledVector(dirFrom(yaw + 0.8, 0.6), 0.02);
-        flower(ctx, fp, dirFrom(yaw + 0.8, -0.2), 0.012, (t - 0.45) * 1.6, spec.colors.flower, 5);
-        const capsule = fruitOrgan(ctx, fp, (t - 0.45) * 1.6);
-        b.ellipsoid(fp.clone().add(v3(0, 0.02, 0)), v3(0.007, 0.022, 0.007), near ? 6 : 4, 3, capsule);
+  const axis = (base: THREE.Vector3, dir: THREE.Vector3, len: number, nodes: number, fruitFrom: number, orderBase: number, yaw0: number) => {
+    const stem = curvedPath(base, dir, len, 0.06, near ? 7 : 4);
+    b.tube(stem, (s) => 0.0075 * (len / H) * (1 - 0.5 * s) + 0.002, 4, stemOrgan(ctx));
+    for (let k = 0; k < nodes; k++) {
+      const t = 0.08 + (k / nodes) * 0.88;
+      const p = along(stem, t);
+      const up = tangentAt(stem, t);
+      for (const sideYaw of [0, Math.PI]) {
+        const yaw = yaw0 + k * 1.57 + sideYaw;
+        const order = Math.min(0.95, orderBase + t * (1 - orderBase) * 0.92);
+        b.leaf(p, dirFrom(yaw, 0.3), leafOrgan(ctx, p, order), {
+          length: 0.16 * (1.1 - t * 0.5), width: 0.075 * (1.05 - t * 0.65), profile: t < 0.4 ? LEAF.ovate : LEAF.lance,
+          segs: near ? 5 : 2, arch: 0.9, across: near ? 5 : 3, curl: 0.06,
+        });
+        if (t > fruitFrom) {
+          const fo = (t - fruitFrom) / (1 - fruitFrom) * 0.85;
+          const axil = p.clone().addScaledVector(dirFrom(yaw + 0.5, 0), 0.012);
+          // Bell hangs outward and slightly down; the capsule that follows stands upright against the stem.
+          bellFlower(ctx, axil, dirFrom(yaw + 0.5, -0.15), 0.03, 0.0085, fo);
+          const q = new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), up.clone().add(dirFrom(yaw + 0.5, 0).multiplyScalar(0.25)).normalize());
+          b.ellipsoid(axil.clone().addScaledVector(up, 0.02), v3(0.007, 0.019, 0.007), near ? 5 : 4, 3, fruitOrgan(ctx, axil, fo), q);
+        }
       }
     }
+    return stem;
+  };
+  const yaw0 = rand() * 6.28;
+  const main = axis(v3(0, 0, 0), v3((rand() - 0.5) * 0.05, 1, (rand() - 0.5) * 0.05), H, near ? 11 : 5, 0.38, 0, yaw0);
+  const branches = near ? 3 : 2;
+  for (let i = 0; i < branches; i++) {
+    const t = 0.14 + i * 0.09;
+    axis(along(main, t), dirFrom(yaw0 + i * 2.2 + 0.8, 1.05), H * (0.62 - i * 0.06), near ? 6 : 3, 0.45, 0.2, yaw0 + i);
   }
 }
 
@@ -67,32 +86,46 @@ export function sunflower(ctx: Ctx) {
   }
 }
 
-/** Castor: thick reddish stem, big palmate leaves, red spiny capsule spikes on top. */
+/** Castor: thick reddish stem, very large palmate leaves on long petioles, erect spikes of spiny capsules. */
 export function castor(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
-  const stem = curvedPath(v3(0, 0, 0), v3(0, 1, 0), H * 0.85, 0.1, near ? 7 : 4);
-  b.tube(stem, (s) => 0.02 * (1 - 0.5 * s), near ? 6 : 4, stemOrgan(ctx));
-  const nodes = near ? 8 : 5;
-  for (let k = 0; k < nodes; k++) {
-    const t = 0.12 + (k / nodes) * 0.82;
-    const p = along(stem, t);
-    palmateLeaf(ctx, p, dirFrom(k * 2.4 + rand() * 0.3, 0.75), {
-      petiole: 0.28 * (1.1 - t * 0.4), lobes: near ? 7 : 5, lobeL: 0.2 * (1.15 - t * 0.4), lobeW: 0.07, spread: 4.6, order: t * 0.9,
-      petioleColor: spec.colors.stem,
-    });
-  }
-  // Two or three racemes of spiny capsules.
-  const top = stem[stem.length - 1]!;
-  for (let r = 0; r < 3; r++) {
-    const axis = curvedPath(top, dirFrom(r * 2.1 + rand(), r === 0 ? 1.45 : 1.0), 0.28, 0.1, 3);
-    b.tube(axis, () => 0.005, 3, stemOrgan(ctx));
-    const caps = near ? 9 : 4;
+  const raceme = (top: THREE.Vector3, dir: THREE.Vector3, len: number, orderBase: number) => {
+    const head: Organ = { part: PART.HEAD, order: orderBase, color: spec.colors.stem, color2: spec.colors.stemRipe, pivot: top.clone() };
+    const axis = curvedPath(top, dir, len, 0.08, 3);
+    b.tube(axis, (s) => 0.006 * (1 - 0.4 * s), 3, head);
+    const caps = near ? 18 : 8;
     for (let k = 0; k < caps; k++) {
-      const p = along(axis, 0.2 + (k / caps) * 0.78);
-      const o = fruitOrgan(ctx, p, r * 0.25 + rand() * 0.2);
-      b.ellipsoid(p.clone().addScaledVector(dirFrom(k * 2.4, 0), 0.018), v3(0.014, 0.014, 0.014), near ? 6 : 4, near ? 4 : 3, o);
+      const t = 0.15 + (k / caps) * 0.83;
+      const p = along(axis, t);
+      const o = fruitOrgan(ctx, p, Math.min(0.9, orderBase + rand() * 0.25));
+      // Capsules crowd round the axis; soft spines are suggested by the faceted, low-poly sphere.
+      b.ellipsoid(p.clone().addScaledVector(dirFrom(k * 2.4, 0.1), 0.024 * (1.15 - t * 0.5)), v3(0.015, 0.016, 0.015), near ? 6 : 4, near ? 4 : 3, o);
     }
+  };
+  const leaves = (stem: THREE.Vector3[], nodes: number, from: number, yaw0: number, orderBase: number, size: number) => {
+    for (let k = 0; k < nodes; k++) {
+      const t = from + (k / nodes) * (0.95 - from);
+      const p = along(stem, t);
+      palmateLeaf(ctx, p, dirFrom(yaw0 + k * 2.4 + rand() * 0.3, 0.7), {
+        petiole: 0.3 * size * (1.1 - t * 0.35), lobes: near ? 7 : 5, lobeL: 0.23 * size * (1.1 - t * 0.3), lobeW: 0.085 * size, spread: 4.3,
+        order: Math.min(0.95, orderBase + t * 0.6), petioleColor: spec.colors.stem, petioleR: 0.005, tilt: 0.75, web: 0.4, droop: 0.5, profile: LEAF.oblance,
+      });
+    }
+  };
+  const stem = curvedPath(v3(0, 0, 0), v3(0, 1, 0), H * 0.78, 0.08, near ? 7 : 4);
+  b.tube(stem, (s) => 0.022 * (1 - 0.5 * s), near ? 6 : 4, stemOrgan(ctx), (s) => (((s * 10) % 1) < 0.1 ? 0.8 : 1));
+  const yaw0 = rand() * 6.28;
+  leaves(stem, near ? 8 : 4, 0.18, yaw0, 0.05, 1);
+  raceme(stem[stem.length - 1]!, v3(0, 1, 0), 0.34, 0);
+  // Sympodial branches below the first spike, each ending in its own (later) spike.
+  const branches = near ? 2 : 1;
+  for (let i = 0; i < branches; i++) {
+    const p = along(stem, 0.62 + i * 0.14);
+    const path = curvedPath(p, dirFrom(yaw0 + i * 2.6 + 1, 0.95), H * 0.36, 0.2, near ? 4 : 2);
+    b.tube(path, (s) => 0.012 * (1 - 0.4 * s), 4, stemOrgan(ctx));
+    leaves(path, near ? 3 : 2, 0.3, yaw0 + i, 0.5, 0.8);
+    raceme(path[path.length - 1]!, tangentAt(path, 1).add(v3(0, 0.6, 0)).normalize(), 0.26, 0.3 + i * 0.15);
   }
 }
 
@@ -157,86 +190,125 @@ export function tomato(ctx: Ctx) {
   }
 }
 
-/** Brinjal: bushy, large soft leaves, purple flowers, long glossy fruits hanging. */
+/** Brinjal: a bushy, forking plant with large soft leaves, purple star flowers and glossy oval fruits. */
 export function brinjal(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
-  const branches = near ? 4 : 3;
-  for (let s = 0; s < branches; s++) {
-    const yaw = (s / branches) * Math.PI * 2 + rand();
-    const stem = curvedPath(v3(0, 0, 0), dirFrom(yaw, 1.15), H * (0.8 + rand() * 0.15), 0.2, near ? 5 : 3);
-    b.tube(stem, (t) => 0.009 * (1 - 0.5 * t), 4, stemOrgan(ctx));
-    const nodes = near ? 5 : 3;
+  const trunk = curvedPath(v3(0, 0, 0), v3((rand() - 0.5) * 0.08, 1, (rand() - 0.5) * 0.08), H * 0.3, 0.05, 3);
+  b.tube(trunk, () => 0.011, 5, stemOrgan(ctx));
+  const fork = trunk[trunk.length - 1]!;
+  let fruits = 0;
+  const limb = (base: THREE.Vector3, yaw: number, elev: number, len: number, nodes: number, orderBase: number) => {
+    const path = curvedPath(base, dirFrom(yaw, elev), len, 0.35, near ? 5 : 3);
+    b.tube(path, (t) => 0.007 * (1 - 0.5 * t), 4, stemOrgan(ctx));
     for (let k = 0; k < nodes; k++) {
-      const t = 0.15 + (k / nodes) * 0.85;
-      const p = along(stem, t);
-      b.leaf(p, dirFrom(yaw + k * 2.2, 0.35), leafOrgan(ctx, p, t * 0.9), { length: 0.17, width: 0.11, profile: LEAF.ovate, segs: near ? 5 : 3, arch: 0.8, curl: 0.08, across: near ? 5 : 3 });
-      if (k >= 1) {
-        const q = p.clone().addScaledVector(dirFrom(yaw + k * 2.2 + 1.4, 0), 0.03);
-        const order = Math.min(0.9, t * 0.8);
-        flower(ctx, q, v3(0, -0.6, 1), 0.016, order, spec.colors.flower, 5);
-        const dir = dirFrom(yaw + k * 2.2 + 1.4, -1.25);
-        // Long purple fruit with a green calyx cap.
-        const o = fruitOrgan(ctx, q, order);
-        const center = q.clone().addScaledVector(dir, 0.08);
-        b.ellipsoid(center, v3(0.025, 0.08, 0.025), near ? 9 : 5, near ? 6 : 3, o, new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), dir));
-        b.ellipsoid(q.clone().addScaledVector(dir, 0.012), v3(0.02, 0.012, 0.02), 5, 3, { ...o, color: [0.36, 0.48, 0.26], color2: [0.36, 0.48, 0.26] });
+      const t = 0.12 + (k / nodes) * 0.88;
+      const p = along(path, t);
+      const ly = yaw + k * 2.3 + rand() * 0.4;
+      const order = Math.min(0.92, orderBase + t * 0.5);
+      // Big, slightly wavy leaves held out on short petioles.
+      const pet = curvedPath(p, dirFrom(ly, 0.6), 0.05, 0.3, 2);
+      b.tube(pet, () => 0.003, 3, leafOrgan(ctx, p, order));
+      b.leaf(pet[pet.length - 1]!, dirFrom(ly, 0.25), leafOrgan(ctx, p, order), {
+        length: 0.19 * (1.1 - t * 0.3), width: 0.135 * (1.1 - t * 0.3), profile: LEAF.ovate, segs: near ? 5 : 3, arch: 0.95, curl: 0.1, across: near ? 5 : 3,
+      });
+      // A flower, then a fruit, at every other node — a handful per plant, as in the field.
+      if (k % 2 === 1 && fruits < (near ? 7 : 4)) {
+        fruits++;
+        const q = p.clone().addScaledVector(dirFrom(ly + 1.5, -0.2), 0.035);
+        const fo = Math.min(0.9, orderBase * 0.6 + t * 0.6);
+        flower(ctx, q, dirFrom(ly + 1.5, -0.5), 0.02, fo, spec.colors.flower, 5, [0.95, 0.78, 0.15]);
+        const dir = dirFrom(ly + 1.5, -1.3);
+        const o = fruitOrgan(ctx, q, fo);
+        const centre = q.clone().addScaledVector(dir, 0.058);
+        b.ellipsoid(centre, v3(0.03, 0.052, 0.03), near ? 9 : 5, near ? 6 : 3, o, new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), dir));
+        // Green spiny calyx capping the fruit.
+        b.ellipsoid(q.clone().addScaledVector(dir, 0.012), v3(0.022, 0.012, 0.022), 5, 3, { ...o, color: [0.36, 0.48, 0.26], color2: [0.36, 0.48, 0.26] });
       }
     }
+    return path;
+  };
+  const limbs = near ? 4 : 3;
+  for (let s = 0; s < limbs; s++) {
+    const yaw = (s / limbs) * Math.PI * 2 + rand();
+    const path = limb(fork, yaw, 1.0, H * (0.62 + rand() * 0.12), near ? 5 : 3, 0.1);
+    if (near) limb(along(path, 0.5), yaw + (s % 2 ? 1 : -1), 0.85, H * 0.36, 3, 0.4);
+  }
+  // A few leaves on the trunk hide the bare fork.
+  for (let k = 0; k < (near ? 3 : 2); k++) {
+    const p = along(trunk, 0.4 + k * 0.25);
+    b.leaf(p, dirFrom(k * 2.4 + rand(), 0.3), leafOrgan(ctx, p, 0.05 + k * 0.05), { length: 0.17, width: 0.12, profile: LEAF.ovate, segs: near ? 4 : 2, arch: 0.9, curl: 0.08, across: near ? 5 : 3 });
   }
 }
 
-/** Chilli: compact bush, small glossy leaves, white flowers, slender pods hanging green → red. */
+/** Chilli: a dense, repeatedly forking bush of glossy lance leaves; white flowers; slender pods hanging green → red. */
 export function chilli(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
-  const stem = curvedPath(v3(0, 0, 0), v3(0, 1, 0), H * 0.4, 0.05, 3);
-  b.tube(stem, () => 0.007, 4, stemOrgan(ctx));
-  const fork = stem[stem.length - 1]!;
-  const branches = near ? 5 : 3;
-  for (let s = 0; s < branches; s++) {
-    const yaw = (s / branches) * Math.PI * 2 + rand();
-    const path = curvedPath(fork, dirFrom(yaw, 0.9), H * 0.55, 0.3, near ? 4 : 2);
-    b.tube(path, () => 0.004, 3, stemOrgan(ctx));
-    const nodes = near ? 5 : 3;
+  const stem = curvedPath(v3(0, 0, 0), v3((rand() - 0.5) * 0.06, 1, (rand() - 0.5) * 0.06), H * 0.34, 0.05, 3);
+  b.tube(stem, () => 0.008, 4, stemOrgan(ctx));
+  const twig = (base: THREE.Vector3, yaw: number, elev: number, len: number, depth: number, orderBase: number) => {
+    const path = curvedPath(base, dirFrom(yaw, elev), len, 0.3, near ? 3 : 2);
+    b.tube(path, () => 0.0045 - depth * 0.001, 3, stemOrgan(ctx));
+    const nodes = near ? 4 : 2;
     for (let k = 0; k < nodes; k++) {
-      const t = 0.15 + (k / nodes) * 0.85;
+      const t = 0.2 + (k / nodes) * 0.8;
       const p = along(path, t);
-      const order = Math.min(0.9, 0.3 + t * 0.6);
-      // Chilli is a dense bush: two leaves per node.
-      for (const off of [0, 2.6]) {
-        b.leaf(p, dirFrom(yaw + k * 2.4 + off, 0.3), leafOrgan(ctx, p, order), { length: 0.085, width: 0.036, profile: LEAF.lance, segs: near ? 4 : 2, arch: 0.5, across: near ? 5 : 3, curl: 0.05 });
+      const order = Math.min(0.92, orderBase + t * 0.25);
+      for (const off of near ? [0, 2.1, 4.2] : [0, 2.6]) {
+        b.leaf(p, dirFrom(yaw + k * 2.4 + off + rand() * 0.6, 0.35 + rand() * 0.5), leafOrgan(ctx, p, order), {
+          length: 0.075 + rand() * 0.025, width: 0.04, profile: LEAF.lance, segs: near ? 3 : 2, arch: 0.9 + rand() * 0.5, twist: (rand() - 0.5) * 0.8,
+        });
       }
-      flower(ctx, p.clone().add(v3(0, 0.005, 0)), v3(0, -1, 0.3), 0.008, order, spec.colors.flower, 5);
-      const dir = dirFrom(yaw + k * 2.4 + 0.8, -1.35);
-      b.tube(curvedPath(p, dir, 0.065, 0.35, near ? 4 : 2), (u) => 0.006 * (1 - 0.8 * u), near ? 5 : 3, fruitOrgan(ctx, p, order));
+      // Pods hang singly from most nodes; the outer twigs carry the most.
+      if (k % 2 === 1 || depth > 0) {
+        flower(ctx, p.clone().add(v3(0, 0.004, 0)), v3(0, -1, 0.3), 0.009, order, spec.colors.flower, 5);
+        const dir = dirFrom(yaw + k * 2.4 + 0.8, -1.35);
+        b.tube(curvedPath(p, dir, 0.075 + rand() * 0.02, 0.35, near ? 4 : 2), (u) => 0.0068 * (1 - 0.8 * u), near ? 5 : 3, fruitOrgan(ctx, p, order));
+      }
     }
+    // Chilli branches fork in twos.
+    if (depth < (near ? 2 : 1)) {
+      const tip = path[path.length - 1]!;
+      for (const sgn of [-1, 1]) twig(tip, yaw + sgn * (0.6 + rand() * 0.6), elev - 0.25 + rand() * 0.35, len * (0.55 + rand() * 0.35), depth + 1, orderBase + 0.25);
+    }
+  };
+  const fork = stem[stem.length - 1]!;
+  const limbs = near ? 3 : 2;
+  for (let s = 0; s < limbs; s++) twig(fork, (s / limbs) * Math.PI * 2 + rand(), 0.85 + rand() * 0.35, H * (0.26 + rand() * 0.1), 0, 0.2);
+  for (let k = 0; k < 3; k++) {
+    const p = along(stem, 0.35 + k * 0.25);
+    b.leaf(p, dirFrom(k * 2.4 + rand(), 0.3), leafOrgan(ctx, p, 0.05 + k * 0.05), { length: 0.09, width: 0.042, profile: LEAF.lance, segs: near ? 4 : 2, arch: 0.6 });
   }
 }
 
-/** Bhendi: tall single stem, lobed leaves, hibiscus-like yellow flowers and upright pods. */
+/** Bhendi: a tall single stem, broad lobed leaves on long petioles, yellow hibiscus flowers with a crimson eye, upright ridged pods. */
 export function bhendi(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
   const stem = curvedPath(v3(0, 0, 0), v3((rand() - 0.5) * 0.05, 1, 0), H * 0.92, 0.05, near ? 7 : 4);
-  b.tube(stem, (s) => 0.011 * (1 - 0.5 * s), 5, stemOrgan(ctx));
-  const nodes = near ? 10 : 5;
+  b.tube(stem, (s) => 0.012 * (1 - 0.5 * s), 5, stemOrgan(ctx));
+  const nodes = near ? 11 : 6;
+  const yaw0 = rand() * 6.28;
   for (let k = 0; k < nodes; k++) {
     const t = 0.08 + (k / nodes) * 0.88;
     const p = along(stem, t);
-    const yaw = k * 2.4;
-    palmateLeaf(ctx, p, dirFrom(yaw, 0.7), { petiole: 0.12 * (1.1 - t * 0.5), lobes: 5, lobeL: 0.11 * (1.1 - t * 0.4), lobeW: 0.05, spread: 2.6, order: t * 0.9, profile: LEAF.lance });
-    if (t > 0.35) {
-      const q = p.clone().addScaledVector(dirFrom(yaw + 1.2, 0), 0.025);
-      const order = (t - 0.35) * 1.4;
-      flower(ctx, q.clone().add(v3(0, 0.03, 0)), dirFrom(yaw + 1.2, 0.8), 0.035, order, spec.colors.flower, 5);
-      // Ridged pod pointing up.
-      b.tube(curvedPath(q, v3(0.15, 1, 0), 0.12, 0.05, 3), (u) => 0.008 * (1 - 0.75 * u), 5, fruitOrgan(ctx, q, order));
+    const yaw = yaw0 + k * 2.4;
+    palmateLeaf(ctx, p, dirFrom(yaw, 0.65), {
+      petiole: 0.2 * (1.1 - t * 0.45), lobes: 5, lobeL: 0.15 * (1.1 - t * 0.35), lobeW: 0.075 * (1.1 - t * 0.3), spread: 2.5,
+      order: t * 0.9, profile: LEAF.lance, tilt: 0.6, web: 0.45, droop: 0.5, petioleR: 0.0035,
+    });
+    if (t > 0.3) {
+      const q = p.clone().addScaledVector(dirFrom(yaw + 1.2, 0), 0.02);
+      const order = (t - 0.3) * 1.3;
+      // Only the top few nodes carry open flowers; below them the pods stand upright.
+      flower(ctx, q.clone().addScaledVector(dirFrom(yaw + 1.2, 0.6), 0.04), dirFrom(yaw + 1.2, 0.5), 0.04, order, spec.colors.flower, 5, [0.5, 0.06, 0.12]);
+      b.tube(curvedPath(q, dirFrom(yaw + 1.2, 1.25), 0.13, 0.1, near ? 4 : 3), (u) => 0.011 * (u < 0.15 ? 0.6 + u * 2.7 : 1 - 0.85 * ((u - 0.15) / 0.85)), 5, fruitOrgan(ctx, q, order), (u) => 0.9 + 0.1 * u);
     }
   }
 }
 
-/** Small onion: a clump of bulbs with tubular leaves that fall over and dry at maturity. */
+/** Small onion: a clump of bulbs with full tufts of tubular leaves that fall over and dry at maturity. */
 export function onion(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
@@ -244,52 +316,71 @@ export function onion(ctx: Ctx) {
   for (let i = 0; i < bulbs; i++) {
     const yaw = (i / bulbs) * Math.PI * 2 + rand() * 0.5;
     // Aggregatum bulbs sit half out of the soil, pinkish-red and glossy.
-    const c = v3(Math.cos(yaw) * 0.022, 0.016, Math.sin(yaw) * 0.022);
-    b.ellipsoid(c, v3(0.02, 0.024, 0.02), near ? 8 : 5, near ? 6 : 3, fruitOrgan(ctx, c, rand() * 0.4));
-    const leaves = near ? 3 : 2;
+    const c = v3(Math.cos(yaw) * 0.02, 0.013, Math.sin(yaw) * 0.02);
+    b.ellipsoid(c, v3(0.017, 0.02, 0.017), near ? 8 : 5, near ? 6 : 3, fruitOrgan(ctx, c, rand() * 0.4));
+    const leaves = near ? 4 : 3;
     for (let k = 0; k < leaves; k++) {
-      const base = c.clone().add(v3(0, 0.015, 0));
-      const dir = dirFrom(yaw + (k - 1) * 0.5, 1.35 - k * 0.15);
+      const base = c.clone().add(v3(0, 0.014, 0));
+      const dir = dirFrom(yaw + (k - (leaves - 1) / 2) * 0.55, 1.4 - Math.abs(k - (leaves - 1) / 2) * 0.14);
       const fall = hangMorph(base, dirFrom(yaw, 0), 1.25);
       const organ = leafOrgan(ctx, base, (i + k) / (bulbs * leaves) * 0.6, fall);
-      b.tube(curvedPath(base, dir, H * (0.75 + rand() * 0.25), 0.4, near ? 6 : 3), (s) => 0.0045 * (1 - 0.75 * s), near ? 5 : 3, organ);
+      b.tube(curvedPath(base, dir, H * (0.75 + rand() * 0.25), 0.4, near ? 6 : 3), (s) => 0.005 * (1 - 0.75 * s), near ? 5 : 3, organ);
     }
   }
 }
 
-/** Turmeric: tufts of large lance leaves on long sheathing petioles; they yellow and dry at harvest. */
+/** Turmeric: clumps of large, upright canna-like leaves on long sheathing petioles; they yellow and dry at harvest. */
 export function turmeric(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
-  const leaves = near ? 8 : 5;
-  for (let k = 0; k < leaves; k++) {
-    const yaw = k * 2.4 + rand() * 0.4;
-    const sheath = curvedPath(v3(0, 0, 0), dirFrom(yaw, 1.4), H * 0.38, 0.15, 2);
-    const order = (k / leaves) * 0.9;
-    b.tube(sheath, () => 0.008, 4, leafOrgan(ctx, v3(0, 0, 0), order));
-    b.leaf(sheath[sheath.length - 1]!, dirFrom(yaw, 1.0), leafOrgan(ctx, v3(0, 0, 0), order), {
-      length: H * 0.55, width: 0.12, profile: LEAF.lance, segs: near ? 6 : 3, arch: 1.4, curl: 0.06, across: near ? 5 : 3, twist: (rand() - 0.5) * 0.4,
-    });
+  // Two or three tillers per clump, each a fan of leaves.
+  const shoots = near ? 3 : 2;
+  for (let sIdx = 0; sIdx < shoots; sIdx++) {
+    const sy = (sIdx / shoots) * Math.PI * 2 + rand();
+    const origin = v3(Math.cos(sy) * 0.035, 0, Math.sin(sy) * 0.035);
+    const leaves = near ? 4 : 3;
+    for (let k = 0; k < leaves; k++) {
+      const yaw = sy + k * 2.4 + rand() * 0.4;
+      const sheath = curvedPath(origin, dirFrom(yaw, 1.38), H * (0.36 + rand() * 0.08), 0.12, 2);
+      const order = ((sIdx * leaves + k) / (shoots * leaves)) * 0.9;
+      b.tube(sheath, () => 0.008, 4, leafOrgan(ctx, origin, order));
+      b.leaf(sheath[sheath.length - 1]!, dirFrom(yaw, 1.15), leafOrgan(ctx, origin, order), {
+        length: H * (0.58 + rand() * 0.12), width: 0.15, profile: LEAF.lance, segs: near ? 7 : 3, arch: 1.1 + rand() * 0.3, curl: 0.07, across: near ? 5 : 3,
+        twist: (rand() - 0.5) * 0.4,
+      });
+    }
   }
 }
 
-/** Tapioca: two or three knobbly woody stems with deeply lobed palmate leaves on red petioles. */
+/** Tapioca: knobbly woody stems that fork near the top, carrying a canopy of drooping, deeply lobed leaves on long red petioles. */
 export function tapioca(ctx: Ctx) {
   const { b, rand, spec, near } = ctx;
   const H = spec.heightM;
+  const foliage = (stem: THREE.Vector3[], nodes: number, from: number, yaw0: number, orderBase: number) => {
+    for (let k = 0; k < nodes; k++) {
+      const t = from + (k / nodes) * (1 - from);
+      const p = along(stem, t);
+      palmateLeaf(ctx, p, dirFrom(yaw0 + k * 2.4 + rand() * 0.3, 0.55), {
+        petiole: 0.26, lobes: near ? 7 : 5, lobeL: 0.17, lobeW: 0.058, spread: 3.7, order: Math.min(0.95, orderBase + (k / nodes) * 0.45),
+        petioleColor: [0.62, 0.22, 0.2], petioleR: 0.0035, tilt: 0.85, web: 0.12, droop: 0.9, profile: LEAF.oblance,
+      });
+    }
+  };
   const stems = 2 + Math.floor(rand() * 2);
   for (let s = 0; s < stems; s++) {
     const yaw = (s / stems) * Math.PI * 2 + rand();
-    const stem = curvedPath(v3(0, 0, 0), v3(Math.cos(yaw) * 0.12, 1, Math.sin(yaw) * 0.12), H * (0.75 + rand() * 0.15), 0.12, near ? 9 : 4);
-    b.tube(stem, (t) => 0.012 * (1 - 0.4 * t), 5, stemOrgan(ctx), (t) => (((t * 18) % 1) < 0.15 ? 0.78 : 1));
-    // Leaves only on the upper part; lower ones have been shed leaving scars.
-    const nodes = near ? 12 : 6;
-    for (let k = 0; k < nodes; k++) {
-      const t = 0.35 + (k / nodes) * 0.65;
-      const p = along(stem, t);
-      palmateLeaf(ctx, p, dirFrom(yaw + k * 2.4, 0.45), {
-        petiole: 0.24, lobes: near ? 7 : 5, lobeL: 0.18, lobeW: 0.048, spread: 4.4, order: (t - 0.35) * 1.4, petioleColor: [0.62, 0.22, 0.2],
-      });
+    const stem = curvedPath(v3(Math.cos(yaw) * 0.03, 0, Math.sin(yaw) * 0.03), v3(Math.cos(yaw) * 0.07, 1, Math.sin(yaw) * 0.07), H * (0.66 + rand() * 0.1), 0.1, near ? 8 : 4);
+    // Leaf scars ring the grey-brown stem where lower leaves were shed.
+    b.tube(stem, (t) => 0.016 * (1 - 0.35 * t), near ? 6 : 5, stemOrgan(ctx), (t) => (((t * 22) % 1) < 0.18 ? 0.74 : 1));
+    foliage(stem, near ? 6 : 3, 0.6, yaw, 0.1);
+    // The stem forks into two or three; the forks carry most of the canopy.
+    const top = stem[stem.length - 1]!;
+    const forks = near ? 3 : 2;
+    for (let f = 0; f < forks; f++) {
+      const fy = yaw + (f / forks) * Math.PI * 2 + rand() * 0.5;
+      const fork = curvedPath(top, dirFrom(fy, 1.0), H * (0.24 + rand() * 0.06), 0.25, near ? 4 : 2);
+      b.tube(fork, (t) => 0.01 * (1 - 0.4 * t), 4, stemOrgan(ctx), (t) => (((t * 8) % 1) < 0.18 ? 0.78 : 1));
+      foliage(fork, near ? 6 : 3, 0.25, fy, 0.45);
     }
   }
 }

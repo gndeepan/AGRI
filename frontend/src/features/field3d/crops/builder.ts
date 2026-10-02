@@ -20,7 +20,9 @@ export interface Organ {
 export type Profile = (s: number) => number;
 
 /** Leaf outline width (0..1) along its length s (0 = base, 1 = tip). */
-export const LEAF: Record<'strap' | 'lance' | 'ovate' | 'heart' | 'oblong' | 'needle', Profile> = {
+export const LEAF: Record<'strap' | 'lance' | 'ovate' | 'heart' | 'oblong' | 'needle' | 'oblance', Profile> = {
+  /** Widest beyond the middle, tapering to a narrow base (cassava and castor lobes). */
+  oblance: (s) => Math.pow(Math.sin(Math.PI * Math.pow(Math.min(1, s * 0.97 + 0.02), 1.5)), 0.9),
   strap: (s) => (s < 0.12 ? 0.55 + (0.45 * s) / 0.12 : Math.pow(1 - (s - 0.12) / 0.88, 0.7)),
   lance: (s) => Math.pow(Math.sin(Math.PI * Math.min(1, s * 0.95 + 0.02)), 1.3),
   ovate: (s) => Math.pow(Math.sin(Math.PI * s), 0.75) * (1.05 - 0.35 * s),
@@ -46,6 +48,8 @@ export interface LeafOpts {
   across?: 3 | 5;
   /** Ragged edge amount 0..1 (torn banana leaves). */
   tear?: number;
+  /** Vein pattern drawn by the shader: netted side veins (broad leaves) or a pale midrib (grasses). */
+  veins?: 'pinnate' | 'parallel' | 'none';
   rand?: () => number;
 }
 
@@ -79,11 +83,13 @@ export class PlantBuilder {
   private tt: number[] = [];
   private pivot: number[] = [];
   private morph: number[] = [];
+  /** Leaf-local coordinates for the vein shader: (across -1..1, along 0..1, vein type 0 none / 1 pinnate / 2 parallel). */
+  private leafUv: number[] = [];
   private idx: number[] = [];
 
   constructor(readonly heightM: number) {}
 
-  vertex(p: THREE.Vector3, o: Organ, shade = 1): number {
+  vertex(p: THREE.Vector3, o: Organ, shade = 1, leaf?: readonly [number, number, number]): number {
     const i = this.pos.length / 3;
     this.pos.push(p.x, p.y, p.z);
     const c2 = o.color2 ?? o.color;
@@ -95,12 +101,16 @@ export class PlantBuilder {
     this.pivot.push(o.pivot.x, o.pivot.y, o.pivot.z);
     const m = o.morph ? o.morph(p) : null;
     this.morph.push(m?.x ?? 0, m?.y ?? 0, m?.z ?? 0);
+    this.leafUv.push(leaf?.[0] ?? 0, leaf?.[1] ?? 0, leaf?.[2] ?? 0);
     return i;
   }
 
   /** Quads between consecutive rows of vertices (rows of equal length). */
-  grid(rows: THREE.Vector3[][], o: Organ, shade: (r: number, c: number) => number = () => 1, closed = false) {
-    const ids = rows.map((row, r) => row.map((p, cIdx) => this.vertex(p, o, shade(r, cIdx))));
+  grid(
+    rows: THREE.Vector3[][], o: Organ, shade: (r: number, c: number) => number = () => 1, closed = false,
+    leaf?: (r: number, c: number) => readonly [number, number, number],
+  ) {
+    const ids = rows.map((row, r) => row.map((p, cIdx) => this.vertex(p, o, shade(r, cIdx), leaf?.(r, cIdx))));
     for (let r = 0; r + 1 < ids.length; r++) {
       const a = ids[r]!;
       const b = ids[r + 1]!;
@@ -184,8 +194,10 @@ export class PlantBuilder {
       side.sub(d.clone().multiplyScalar(side.dot(d))).normalize();
     }
     const mid = (across - 1) / 2;
-    // Midrib and the shaded leaf base are a touch darker; edges catch light.
-    this.grid(rows, o, (r, cIdx) => (0.8 + 0.2 * (r / segs)) * (cIdx === mid ? 0.92 : 1));
+    const veins = opts.veins ?? ((opts.fold ?? 0) > 0 || opts.profile === LEAF.strap ? 'parallel' : 'pinnate');
+    const veinType = veins === 'none' ? 0 : veins === 'pinnate' ? 1 : 2;
+    // The shaded leaf base is a touch darker; the shader draws midrib and veins from the leaf coordinates.
+    this.grid(rows, o, (r) => 0.8 + 0.2 * (r / segs), false, (r, cIdx) => [(cIdx - mid) / mid, r / segs, veinType]);
     return spine;
   }
 
@@ -235,6 +247,7 @@ export class PlantBuilder {
     g.setAttribute('aT', new THREE.Float32BufferAttribute(this.tt, 1));
     g.setAttribute('aPivot', new THREE.Float32BufferAttribute(this.pivot, 3));
     g.setAttribute('aMorph', new THREE.Float32BufferAttribute(this.morph, 3));
+    g.setAttribute('aLeaf', new THREE.Float32BufferAttribute(this.leafUv, 3));
     g.setIndex(this.idx);
     g.computeVertexNormals();
     g.computeBoundingSphere();

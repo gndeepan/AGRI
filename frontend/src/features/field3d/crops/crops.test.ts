@@ -141,3 +141,17 @@ describe('rowSegments', () => {
     for (const r of rows) expect(Math.hypot(r.bx - r.ax, r.bz - r.az)).toBeLessThan(101);
   });
 });
+
+describe('senescence cap', () => {
+  it('keeps castor and red gram leafy at maturity while other dicots dry off', () => {
+    for (const slug of ['castor', 'red-gram']) {
+      const s = CROP_SPECS[slug]!;
+      const ripe = cropVisual(s, 4, 1);
+      expect(ripe.senescence, slug).toBeLessThanOrEqual(s.maxSenescence!);
+      expect(ripe.ripe, slug).toBeGreaterThan(0.9);
+      // Still green-dominant: leaves yellow but do not turn straw.
+      expect(ripe.leafColor[1], slug).toBeGreaterThan(ripe.leafColor[2]! + 0.1);
+    }
+    expect(cropVisual(CROP_SPECS.sesame!, 4, 1).senescence).toBeGreaterThan(0.8);
+  });
+});

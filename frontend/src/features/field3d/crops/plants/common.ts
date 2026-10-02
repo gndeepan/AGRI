@@ -60,10 +60,12 @@ export function tangentAt(path: THREE.Vector3[], t: number): THREE.Vector3 {
 export function pinnateLeaf(
   ctx: Ctx, base: THREE.Vector3, dir: THREE.Vector3, opts: {
     rachis: number; pairs: number; terminal: boolean; leafletL: number; leafletW: number; profile?: Profile; order: number; arch?: number;
+    /** Tiny leaflets (chickpea) need only a couple of segments. */
+    light?: boolean;
   },
 ) {
   const { b, near } = ctx;
-  const segs = near ? 4 : 2;
+  const segs = near && !opts.light ? 4 : 2;
   const path = curvedPath(base, dir, opts.rachis, opts.arch ?? 0.6, near ? 4 : 2);
   const organ = leafOrgan(ctx, base, opts.order);
   b.tube(path, () => 0.0018, 3, organ);
@@ -85,7 +87,7 @@ export function pinnateLeaf(
 }
 
 /** Three leaflets on a petiole (black gram, green gram, cowpea, red gram). */
-export function trifoliate(ctx: Ctx, base: THREE.Vector3, dir: THREE.Vector3, opts: { petiole: number; leafletL: number; leafletW: number; profile?: Profile; order: number }) {
+export function trifoliate(ctx: Ctx, base: THREE.Vector3, dir: THREE.Vector3, opts: { petiole: number; leafletL: number; leafletW: number; profile?: Profile; order: number; light?: boolean }) {
   const { b, near } = ctx;
   const path = curvedPath(base, dir, opts.petiole, 0.5, 2);
   const organ = leafOrgan(ctx, base, opts.order);
@@ -93,43 +95,67 @@ export function trifoliate(ctx: Ctx, base: THREE.Vector3, dir: THREE.Vector3, op
   const end = path[path.length - 1]!;
   const tan = tangentAt(path, 1);
   const side = tan.clone().cross(v3(0, 1, 0)).normalize();
-  const seg = near ? 4 : 2;
+  // `light` keeps very leafy shrubs (red gram) inside the vertex budget.
+  const seg = near && !opts.light ? 4 : 2;
   const prof = opts.profile ?? LEAF.ovate;
-  b.leaf(end, tan.clone().add(v3(0, 0.25, 0)), organ, { length: opts.leafletL, width: opts.leafletW, profile: prof, segs: seg, arch: 0.5, curl: 0.05, across: near ? 5 : 3 });
+  b.leaf(end, tan.clone().add(v3(0, 0.25, 0)), organ, { length: opts.leafletL, width: opts.leafletW, profile: prof, segs: seg, arch: 0.5, curl: 0.05, across: near && !opts.light ? 5 : 3 });
   for (const sgn of [-1, 1]) {
     const d = side.clone().multiplyScalar(sgn).addScaledVector(tan, 0.35).add(v3(0, 0.2, 0));
     b.leaf(end, d, organ, { length: opts.leafletL * 0.85, width: opts.leafletW * 0.9, profile: prof, segs: seg, arch: 0.5 });
   }
 }
 
-/** Palmate leaf: lobes fanned out from the petiole tip (castor, cotton, bhendi, tapioca). */
+/**
+ * Palmate leaf: lobes fanned out from the petiole tip (castor, cotton, bhendi, tapioca).
+ * The blade is tilted outward (`tilt`, radians from horizontal) so it reads from eye level,
+ * and the fused centre of the blade is filled by a small web.
+ */
 export function palmateLeaf(
   ctx: Ctx, base: THREE.Vector3, dir: THREE.Vector3, opts: {
     petiole: number; lobes: number; lobeL: number; lobeW: number; spread: number; order: number; profile?: Profile; petioleColor?: RGB;
+    tilt?: number; web?: number; droop?: number; petioleR?: number;
   },
 ) {
   const { b, near } = ctx;
   const path = curvedPath(base, dir, opts.petiole, 0.7, near ? 3 : 2);
   const organ = leafOrgan(ctx, base, opts.order);
-  b.tube(path, () => 0.003, 3, opts.petioleColor ? { ...organ, color: opts.petioleColor, part: PART.STEM } : organ);
+  b.tube(path, () => opts.petioleR ?? 0.003, 3, opts.petioleColor ? { ...organ, color: opts.petioleColor, part: PART.STEM } : organ);
   const end = path[path.length - 1]!;
   const tan = tangentAt(path, 1);
-  // The blade lies roughly flat, facing up; lobes radiate outward from the petiole.
-  const out = v3(tan.x, 0, tan.z).normalize();
+  const out = v3(tan.x, 0, tan.z);
   if (out.lengthSq() < 1e-6) out.set(1, 0, 0);
-  const yaw0 = Math.atan2(out.z, out.x);
+  out.normalize();
+  const tilt = opts.tilt ?? 0.35;
+  // In-plane axes of the tilted blade: `fwd` points away from the plant and downhill, `side` across.
+  const fwd = out.clone().multiplyScalar(Math.cos(tilt)).add(v3(0, -Math.sin(tilt), 0));
+  const side = out.clone().cross(v3(0, 1, 0)).normalize();
+  const normal = side.clone().cross(fwd).normalize();
+  const web = (opts.web ?? 0.3) * opts.lobeL;
+  if (web > 0) b.disc(end, normal.y < 0 ? normal.clone().negate() : normal, web, near ? Math.max(6, opts.lobes) : 5, organ, 0.92);
   for (let i = 0; i < opts.lobes; i++) {
     const f = opts.lobes === 1 ? 0 : i / (opts.lobes - 1) - 0.5;
-    const yaw = yaw0 + f * opts.spread;
-    const len = opts.lobeL * (1 - Math.abs(f) * 0.55);
-    const d = dirFrom(yaw, 0.15 - Math.abs(f) * 0.2);
-    b.leaf(end, d, organ, { length: len, width: opts.lobeW, profile: opts.profile ?? LEAF.lance, segs: near ? 4 : 2, arch: 0.35, curl: 0.06, across: near ? 5 : 3 });
+    const a = f * opts.spread;
+    const len = opts.lobeL * (1 - Math.abs(f) * 0.5);
+    const d = fwd.clone().multiplyScalar(Math.cos(a)).addScaledVector(side, Math.sin(a)).normalize();
+    b.leaf(end, d, organ, {
+      length: len, width: opts.lobeW * (1 - Math.abs(f) * 0.25), profile: opts.profile ?? LEAF.lance, segs: near ? 4 : 2,
+      arch: opts.droop ?? 0.35, curl: 0.06, across: near ? 5 : 3,
+    });
   }
 }
 
+/** Tubular bell flower (sesame): a short tube from `base` along `dir`, flaring at the mouth. */
+export function bellFlower(ctx: Ctx, base: THREE.Vector3, dir: THREE.Vector3, length: number, radius: number, order: number, color?: RGB) {
+  const organ: Organ = { part: PART.FLOWER, order, color: color ?? ctx.spec.colors.flower, pivot: base.clone() };
+  const path = curvedPath(base, dir, length, 0.5, ctx.near ? 3 : 2);
+  ctx.b.tube(path, (s) => radius * (0.35 + 0.65 * s * s + (s > 0.85 ? 0.35 : 0)), ctx.near ? 6 : 4, organ, (s) => 0.9 + 0.15 * s);
+}
+
 /** Small star/cup flower facing `normal`. */
-export function flower(ctx: Ctx, center: THREE.Vector3, normal: THREE.Vector3, radius: number, order: number, color?: RGB, petals = 5) {
+export function flower(ctx: Ctx, center: THREE.Vector3, normal: THREE.Vector3, radius: number, order: number, color?: RGB, petals = 5, eye?: RGB) {
   const organ: Organ = { part: PART.FLOWER, order, color: color ?? ctx.spec.colors.flower, pivot: center.clone() };
+  // Contrasting centre (bhendi's crimson eye, brinjal's yellow anther cone).
+  if (eye) ctx.b.disc(center.clone().addScaledVector(normal.clone().normalize(), radius * 0.12), normal, radius * 0.32, 5, { ...organ, color: eye });
   if (!ctx.near) {
     ctx.b.disc(center, normal, radius, 5, organ);
     return;

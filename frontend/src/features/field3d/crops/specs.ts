@@ -98,6 +98,11 @@ export interface CropSpec {
   bloomStrength?: number;
   /** Birds attracted at maturity: parakeets to grain heads, mynas elsewhere. */
   birds: 'parakeet' | 'myna';
+  /**
+   * Cap on leaf senescence (0..1) for crops harvested while still leafy (castor, red gram):
+   * their leaves yellow but mostly stay on the plant instead of dying and dropping.
+   */
+  maxSenescence?: number;
   /** Model-specific knobs (pod colour variant, leaflet count, etc.). */
   variant?: 'black_gram' | 'green_gram' | 'cowpea';
 }
@@ -114,7 +119,7 @@ const GRASS_COLORS = {
 };
 const BROAD_COLORS = {
   leafYoung: c('#86bf4a'), leaf: c('#3f7f2a'), leafRipe: c('#8c9a40'), leafDead: c('#8a6e45'),
-  stem: c('#5f8a34'), stemRipe: c('#8a7048'),
+  stem: c('#5f8a34'), stemRipe: c('#a58a5e'),
 };
 
 export const CROP_SPECS: Record<string, CropSpec> = {
@@ -127,7 +132,7 @@ export const CROP_SPECS: Record<string, CropSpec> = {
   sorghum: {
     slug: 'sorghum', archetype: 'tall_grass', model: 'sorghum', profile: 'cereal',
     rowM: 0.45, plantM: 0.15, heightM: 1.9, spreadM: 0.35, ground: { kind: 'ridges', heightM: 0.15 }, soil: 'black',
-    colors: { ...GRASS_COLORS, flower: c('#efe3a8'), fruit: c('#9fb560'), fruitRipe: c('#a4502e'), head: c('#a8b866'), headRipe: c('#a4502e') },
+    colors: { ...GRASS_COLORS, flower: c('#efe3a8'), fruit: c('#9fb560'), fruitRipe: c('#a4502e'), head: c('#d2c27a'), headRipe: c('#a3542c') },
     stiffness: 0.4, topBloom: 'head', birds: 'parakeet',
   },
   'pearl-millet': {
@@ -145,13 +150,13 @@ export const CROP_SPECS: Record<string, CropSpec> = {
   'finger-millet': {
     slug: 'finger-millet', archetype: 'tuft_grass', model: 'finger_millet', profile: 'cereal',
     rowM: 0.225, plantM: 0.1, heightM: 0.9, spreadM: 0.16, ground: { kind: 'flat' }, soil: 'red',
-    colors: { ...GRASS_COLORS, flower: c('#e3dca8'), fruit: c('#7d9a45'), fruitRipe: c('#8a5a3a'), head: c('#7d9a45'), headRipe: c('#8a5a3a') },
+    colors: { ...GRASS_COLORS, flower: c('#e3dca8'), fruit: c('#8f9a4a'), fruitRipe: c('#7a4e30'), head: c('#8f9a4a'), headRipe: c('#7a4e30') },
     stiffness: 0.15, topBloom: 'head', birds: 'parakeet',
   },
   'foxtail-millet': {
     slug: 'foxtail-millet', archetype: 'tuft_grass', model: 'foxtail_millet', profile: 'cereal',
     rowM: 0.225, plantM: 0.1, heightM: 1.0, spreadM: 0.15, ground: { kind: 'flat' }, soil: 'red',
-    colors: { ...GRASS_COLORS, flower: c('#e6dca0'), fruit: c('#9ab35a'), fruitRipe: c('#d1b46a'), head: c('#9ab35a'), headRipe: c('#d1b46a') },
+    colors: { ...GRASS_COLORS, flower: c('#e6dca0'), fruit: c('#8fae4e'), fruitRipe: c('#d6a63a'), head: c('#8fae4e'), headRipe: c('#d6a63a') },
     stiffness: 0.12, topBloom: 'head', birds: 'parakeet',
   },
   'little-millet': {
@@ -193,8 +198,8 @@ export const CROP_SPECS: Record<string, CropSpec> = {
   'red-gram': {
     slug: 'red-gram', archetype: 'bush_legume', model: 'red_gram', profile: 'dicot',
     rowM: 0.9, plantM: 0.3, heightM: 1.8, spreadM: 0.45, ground: { kind: 'ridges', heightM: 0.15 }, soil: 'red',
-    colors: { ...BROAD_COLORS, leaf: c('#4d7f3a'), stem: c('#6a7a3e'), stemRipe: c('#7a6545'), flower: c('#f0b02a'), fruit: c('#6f8a3c'), fruitRipe: c('#6a4a35'), head: c('#d25a2a'), headRipe: c('#d25a2a') },
-    stiffness: 0.55, topBloom: 'flower', birds: 'myna',
+    colors: { ...BROAD_COLORS, leaf: c('#4d7f3a'), stem: c('#6a7a3e'), stemRipe: c('#94805a'), flower: c('#f0b02a'), fruit: c('#6f8a3c'), fruitRipe: c('#7a5a40'), head: c('#d25a2a'), headRipe: c('#d25a2a') },
+    stiffness: 0.55, topBloom: 'flower', birds: 'myna', maxSenescence: 0.45,
   },
   'bengal-gram': {
     slug: 'bengal-gram', archetype: 'bush_legume', model: 'bengal_gram', profile: 'dicot',
@@ -217,8 +222,8 @@ export const CROP_SPECS: Record<string, CropSpec> = {
   castor: {
     slug: 'castor', archetype: 'oilseed', model: 'castor', profile: 'dicot',
     rowM: 0.9, plantM: 0.6, heightM: 2.0, spreadM: 0.55, ground: { kind: 'ridges', heightM: 0.15 }, soil: 'red',
-    colors: { ...BROAD_COLORS, leaf: c('#3f6f34'), stem: c('#8a4a4a'), stemRipe: c('#6a4a3a'), flower: c('#e8d080'), fruit: c('#b84a48'), fruitRipe: c('#7a5a3a'), head: c('#b84a48'), headRipe: c('#7a5a3a') },
-    stiffness: 0.65, topBloom: 'fruit', birds: 'myna',
+    colors: { ...BROAD_COLORS, leaf: c('#3f6f34'), stem: c('#8a4a4a'), stemRipe: c('#6a4a3a'), flower: c('#e8d080'), fruit: c('#b84a48'), fruitRipe: c('#5e3e26'), head: c('#b84a48'), headRipe: c('#5e3e26') },
+    stiffness: 0.65, topBloom: 'fruit', birds: 'myna', maxSenescence: 0.3,
   },
   cotton: {
     slug: 'cotton', archetype: 'broadleaf_tall', model: 'cotton', profile: 'dicot',
@@ -242,12 +247,12 @@ export const CROP_SPECS: Record<string, CropSpec> = {
     slug: 'chilli', archetype: 'vegetable', model: 'chilli', profile: 'vegetable',
     rowM: 0.6, plantM: 0.45, heightM: 0.8, spreadM: 0.3, ground: { kind: 'beds', heightM: 0.15 }, soil: 'red', mulchWithDrip: true,
     colors: { ...BROAD_COLORS, leaf: c('#2f7028'), stemRipe: c('#4f7a2e'), flower: c('#f6f3e6'), fruit: c('#3f8a2a'), fruitRipe: c('#c8201a'), head: c('#f6f3e6'), headRipe: c('#f6f3e6') },
-    stiffness: 0.55, topBloom: 'fruit', birds: 'myna',
+    stiffness: 0.55, topBloom: 'fruit', bloomStrength: 0.75, birds: 'myna',
   },
   bhendi: {
     slug: 'bhendi', archetype: 'vegetable', model: 'bhendi', profile: 'vegetable',
     rowM: 0.45, plantM: 0.3, heightM: 1.5, spreadM: 0.3, ground: { kind: 'ridges', heightM: 0.15 }, soil: 'red',
-    colors: { ...BROAD_COLORS, leaf: c('#4a8436'), stem: c('#6a8a3e'), flower: c('#f3e27a'), fruit: c('#7aa440'), fruitRipe: c('#6a8a38'), head: c('#f3e27a'), headRipe: c('#f3e27a') },
+    colors: { ...BROAD_COLORS, leaf: c('#4a8436'), stem: c('#6a8a3e'), flower: c('#e2b812'), fruit: c('#7aa440'), fruitRipe: c('#6a8a38'), head: c('#f3e27a'), headRipe: c('#f3e27a') },
     stiffness: 0.55, topBloom: 'flower', birds: 'myna',
   },
   'small-onion': {
@@ -266,7 +271,7 @@ export const CROP_SPECS: Record<string, CropSpec> = {
     slug: 'tapioca', archetype: 'broadleaf_tall', model: 'tapioca', profile: 'tuber',
     rowM: 0.9, plantM: 0.9, heightM: 2.2, spreadM: 0.6, ground: { kind: 'ridges', heightM: 0.2 }, soil: 'red',
     colors: { ...BROAD_COLORS, leaf: c('#3a6e30'), stem: c('#8a7a5a'), stemRipe: c('#7a6a52'), flower: c('#d8d0a0'), fruit: c('#8a7a5a'), fruitRipe: c('#8a7a5a'), head: c('#d8d0a0'), headRipe: c('#d8d0a0') },
-    stiffness: 0.5, topBloom: null, birds: 'myna',
+    stiffness: 0.5, topBloom: null, birds: 'myna', maxSenescence: 0.4,
   },
   banana: {
     slug: 'banana', archetype: 'broadleaf_tall', model: 'banana', profile: 'banana',

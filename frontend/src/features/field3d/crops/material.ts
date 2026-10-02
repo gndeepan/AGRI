@@ -60,6 +60,8 @@ attribute float aOrder;
 attribute float aT;
 attribute vec3 aPivot;
 attribute vec3 aMorph;
+attribute vec3 aLeaf;
+varying vec3 vLeaf;
 varying float vPart;
 varying float vOrder;
 varying float vT;
@@ -108,6 +110,7 @@ vOrder = aOrder;
 vT = aT;
 vRnd = aRand.y;
 vColor2 = aColor2;
+vLeaf = aLeaf;
 `;
 
 const FRAG_DECL = /* glsl */ `
@@ -123,6 +126,7 @@ varying float vOrder;
 varying float vT;
 varying float vRnd;
 varying vec3 vColor2;
+varying vec3 vLeaf;
 `;
 
 const COLOR = /* glsl */ `
@@ -135,6 +139,19 @@ if (vPart < 0.5) {
   col = uLeafColor * base.r * (0.86 + 0.26 * vRnd);
   float dead = smoothstep(vOrder - 0.06, vOrder + 0.06, uSen + (vRnd - 0.5) * 0.08);
   col = mix(col, uLeafDead * base.r * (0.85 + 0.3 * vRnd), dead);
+  // Veins from leaf-local coordinates: a midrib plus netted side veins on broad leaves,
+  // a pale midrib on grass blades. Cheap enough to run on every leaf fragment.
+  float ax = abs(vLeaf.x);
+  if (vLeaf.z > 1.5) {
+    col = mix(col, col * 1.35 + 0.05, (1.0 - smoothstep(0.0, 0.16, ax)) * (1.0 - dead) * 0.55);
+    col *= 0.94 + 0.06 * sin(vLeaf.x * 14.0);
+  } else if (vLeaf.z > 0.5) {
+    float side = abs(sin((vLeaf.y * 9.0 - ax * 2.2) * 3.14159));
+    float vein = (1.0 - smoothstep(0.0, 0.09, ax)) + (1.0 - smoothstep(0.0, 0.22, side)) * 0.45 * (1.0 - ax * 0.5);
+    col *= 1.0 - 0.2 * clamp(vein, 0.0, 1.0);
+    // Blade between veins is slightly fuller in colour; the margin is a touch lighter.
+    col *= 0.94 + 0.1 * ax;
+  }
 } else if (vPart < 2.5) {
   col = base;
 } else if (vPart < 3.5) {
@@ -158,6 +175,8 @@ if (vPart > 0.5 && vPart < 2.5) {
   vec3 toCam = normalize(vViewPosition);
   float back = pow(clamp(dot(-toCam, directionalLights[0].direction), 0.0, 1.0), 3.0);
   outgoingLight += diffuseColor.rgb * directionalLights[0].color * back * uTranslucency;
+  // Leaves scatter and transmit light inside a canopy: lift shaded undersides so they never go black.
+  outgoingLight += diffuseColor.rgb * directionalLights[0].color * 0.05;
 }
 #endif
 #include <opaque_fragment>

@@ -60,7 +60,8 @@ const PROFILES: Record<GrowthProfile, Key[]> = {
   cereal: chain(
     { scale: 0.05, leaves: 0.12 },
     { scale: 0.16, leaves: 0.3, tone: 0.4 },
-    { scale: 0.82, leaves: 0.95, head: 0.15, tone: 1 },
+    // Heads stay in the boot until flowering.
+    { scale: 0.82, leaves: 0.95, head: 0, tone: 1 },
     { scale: 1, leaves: 1, head: 1, flower: 1, drop: 0.2, fruit: 0.35, size: 0.3 },
     { fruit: 1, size: 1, ripe: 0.3, drop: 1, sen: 0.3, droop: 0.45, tone: 1.4 },
     { ripe: 1, sen: 0.9, droop: 1, tone: 2.6 },
@@ -97,7 +98,8 @@ const PROFILES: Record<GrowthProfile, Key[]> = {
     { scale: 0.3, leaves: 0.5, tone: 0.5 },
     { scale: 0.85, leaves: 1, fruit: 0.3, size: 0.2, tone: 1 },
     { scale: 1, fruit: 0.6, size: 0.5 },
-    { fruit: 1, size: 1, droop: 0.3, sen: 0.3, ripe: 0.5, tone: 1.3 },
+    // Tops stay green while bulbs fill; they only fall and dry once the crop matures.
+    { fruit: 1, size: 1, droop: 0.2, sen: 0.06, ripe: 0.5, tone: 1.15 },
     { droop: 1, sen: 0.9, ripe: 1, tone: 2.4 },
   ),
   // Banana: "flowering" is shooting of the bunch; harvested green-mature.
@@ -132,6 +134,13 @@ const PROFILES: Record<GrowthProfile, Key[]> = {
 /** Profiles whose dead leaves fall off (pulses defoliate at maturity, tapioca sheds lower leaves). */
 export function shedsLeaves(profile: GrowthProfile): boolean {
   return profile === 'dicot' || profile === 'tuber';
+}
+
+/** Applies a crop's senescence cap: leaves yellow less and fewer of them die. */
+function capSenescence(spec: CropSpec, k: Key): Key {
+  const cap = spec.maxSenescence;
+  if (cap == null) return k;
+  return { ...k, sen: Math.min(k.sen, cap), tone: Math.min(k.tone, 1 + cap * 2) };
 }
 
 /** Backend generic stage keys, in order. */
@@ -197,6 +206,7 @@ export function cropVisual(spec: CropSpec, stageIndex: number, stageProgress: nu
       droop: lerp(a.droop, b.droop, t), tone: lerp(a.tone, b.tone, t),
     };
   }
+  k = capSenescence(spec, k);
   const b = bloom(spec, k);
   return {
     presence,
