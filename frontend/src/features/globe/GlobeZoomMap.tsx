@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Map as MLMap, type FitBoundsOptions, type GeoJSONSource, type RasterSourceSpecification } from 'maplibre-gl'
+import { Map as MLMap, type FitBoundsOptions, type GeoJSONSource, type RasterSourceSpecification, type StyleSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '@/features/map/maplibreWorker'
 import type { FeatureCollection, Polygon } from 'geojson'
@@ -10,8 +10,29 @@ import { cn } from '@/lib/utils'
 import { bboxCenter, fieldsBbox, spinStart } from './camera'
 import type { Bbox, GlobeField, GlobeZoomProps } from './types'
 
-/** Free OSM-based vector style (OpenFreeMap, no key). */
-const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark'
+/**
+ * Photo-real globe: Esri World Imagery from orbit down to the field, with Esri's
+ * boundaries/places reference labels fading in as the camera descends.
+ */
+const SATELLITE_STYLE: StyleSpecification = {
+  version: 8,
+  glyphs: baseStyle.glyphs,
+  sources: {
+    satellite: baseStyle.sources['esri-imagery'] as RasterSourceSpecification,
+    labels: baseStyle.sources['esri-labels'] as RasterSourceSpecification,
+  },
+  layers: [
+    { id: 'space', type: 'background', paint: { 'background-color': '#000000' } },
+    { id: 'satellite', type: 'raster', source: 'satellite', paint: { 'raster-fade-duration': 300 } },
+    {
+      id: 'labels',
+      type: 'raster',
+      source: 'labels',
+      minzoom: 3,
+      paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 3, 0, 5, 0.85, 15, 0.7] },
+    },
+  ],
+}
 const GOLD = '#f2c14e'
 const LOAD_TIMEOUT_MS = 15000
 
@@ -61,37 +82,16 @@ function fieldCollection(fields: GlobeField[]): FeatureCollection<Polygon> {
 
 function addOverlays(map: MLMap, fields: GlobeField[]) {
   map.setProjection({ type: 'globe' })
+  // Blue atmospheric limb from orbit; at low altitude it becomes a hazy daylight horizon.
   map.setSky({
-    'sky-color': '#0a1624',
-    'horizon-color': '#2a5677',
-    'fog-color': '#0c1822',
-    'sky-horizon-blend': 0.6,
-    'horizon-fog-blend': 0.6,
-    'fog-ground-blend': 0.7,
-    'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 6, 1, 9, 0],
+    'sky-color': '#5d9fe0',
+    'horizon-color': '#cfe6ff',
+    'fog-color': '#d8e8f5',
+    'sky-horizon-blend': 0.5,
+    'horizon-fog-blend': 0.7,
+    'fog-ground-blend': 0.85,
+    'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 10, 0],
   })
-
-  // Satellite imagery fades in as the camera descends and covers the dark roads/buildings;
-  // only place names are lifted back above it.
-  map.addSource('satellite', baseStyle.sources['esri-imagery'] as RasterSourceSpecification)
-  map.addLayer({
-    id: 'satellite',
-    type: 'raster',
-    source: 'satellite',
-    minzoom: 7.5,
-    paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0, 11, 1], 'raster-fade-duration': 300 },
-  })
-  for (const layer of map.getStyle().layers) {
-    if (layer.type !== 'symbol' || !('source-layer' in layer) || layer['source-layer'] !== 'place') continue
-    if (layer.id === 'place_other' || layer.id === 'place_suburb') {
-      map.setLayoutProperty(layer.id, 'visibility', 'none') // too dense over imagery
-      continue
-    }
-    map.moveLayer(layer.id)
-    map.setPaintProperty(layer.id, 'text-color', '#f3ead2')
-    map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(10,14,8,0.75)')
-    map.setPaintProperty(layer.id, 'text-halo-width', 1.2)
-  }
 
   map.addSource('fields', { type: 'geojson', data: fieldCollection(fields) })
   map.addLayer({ id: 'fields-fill', type: 'fill', source: 'fields', paint: { 'fill-color': GOLD, 'fill-opacity': 0.16 } })
@@ -209,7 +209,7 @@ export default function GlobeZoomMap({
     try {
       map = new MLMap({
         container: el,
-        style: DARK_STYLE,
+        style: SATELLITE_STYLE,
         center: [20, 15],
         zoom: 1.2,
         interactive,
@@ -223,10 +223,6 @@ export default function GlobeZoomMap({
       return
     }
     mapRef.current = map
-    // The dark style references patterns (e.g. "wood-pattern") absent from its sprite; stub them.
-    map.setMissingStyleImageResolver((id) => {
-      if (!map.hasImage(id)) map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) })
-    })
     const timeout = window.setTimeout(() => {
       if (!map.loaded()) latest.current.onFailed?.()
     }, LOAD_TIMEOUT_MS)
@@ -323,7 +319,7 @@ export default function GlobeZoomMap({
   }, [ready, targetKey, play])
 
   return (
-    <div className={cn('relative overflow-hidden bg-[#0a1624]', className)}>
+    <div className={cn('globe-space relative overflow-hidden', className)}>
       {/* maplibre-gl.css sets position:relative on the container, overriding layered Tailwind utilities. */}
       <div className={cn('absolute inset-0', !interactive && 'pointer-events-none')}>
         <div
