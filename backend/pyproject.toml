@@ -1,0 +1,18 @@
+[project]
+name = "bhoomi-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "BLE"]
+ignore = ["B008", "SIM105"]  # FastAPI Depends/Query defaults; explicit try/except-pass is clearer
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["db: needs PostgreSQL/PostGIS (skipped when unreachable)"]
+filterwarnings = ["ignore::DeprecationWarning"]

@@ -1,0 +1,72 @@
+name: bhoomi
+
+x-api-env: &api-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://bhoomi:${POSTGRES_PASSWORD:-bhoomi_dev}@db:5432/bhoomi
+    REDIS_URL: redis://redis:6379/0
+    SMTP_HOST: mailpit
+    SMTP_PORT: "1025"
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: bhoomi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bhoomi_dev}
+      POSTGRES_DB: bhoomi
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data, ./infra/db/init:/docker-entrypoint-initdb.d:ro]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bhoomi -d bhoomi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025", "1025:1025"]
+
+  api:
+    build: ./backend
+    <<: *api-env
+    command: ["sh", "-c", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+    volumes: [./backend:/app]
+    ports: ["8000:8000"]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    build: ./backend
+    <<: *api-env
+    command: ["python", "-m", "app.worker"]
+    volumes: [./backend:/app]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    image: node:24-alpine
+    working_dir: /app
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0"]
+    environment:
+      VITE_API_PROXY: http://api:8000
+    volumes: [./frontend:/app, webnodemodules:/app/node_modules]
+    ports: ["5173:5173"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  redisdata:
+  webnodemodules:

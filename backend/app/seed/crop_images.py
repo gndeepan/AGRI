@@ -1,0 +1,173 @@
+"""Photo credits for crop images in frontend/public/images/crops (see ATTRIBUTION.md there).
+Generated from Wikimedia Commons metadata; licences verified as CC BY / CC BY-SA / CC0 / public domain."""
+
+IMAGE_CREDITS: dict[str, dict] = {
+    'paddy': {
+        'author': 'Karthik jeyaraman',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Paddy_fields,_rice_plants,_agriculture_fields_of_Ramanathapuram,_rameshwaram,_tamilnadu,_india.jpg',
+        'title': 'Paddy fields, rice plants, agriculture fields of Ramanathapuram, rameshwaram, tamilnadu, india.jpg',
+    },
+    'groundnut': {
+        'author': 'Kambai Akau',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Peanut_field,_Aduwan,_Kafanchan_1.jpg',
+        'title': 'Peanut field, Aduwan, Kafanchan 1.jpg',
+    },
+    'black-gram': {
+        'author': 'Dinesh Valke from Thane, India',
+        'license': 'CC BY-SA 2.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Vigna_mungo_var._mungo_(4663940080).jpg',
+        'title': 'Vigna mungo var. mungo (4663940080).jpg',
+    },
+    'green-gram': {
+        'author': 'Bff',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Vigna_radiata20230627_20775.jpg',
+        'title': 'Vigna radiata20230627 20775.jpg',
+    },
+    'maize': {
+        'author': 'Kulspedia',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Maize_Field.jpg',
+        'title': 'Maize Field.jpg',
+    },
+    'cotton': {
+        'author': 'Bubba73 (Jud McCranie)',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Cotton_plant,_Ware_County,_GA,_US.jpg',
+        'title': 'Cotton plant, Ware County, GA, US.jpg',
+    },
+    'sugarcane': {
+        'author': 'Timothy A. Gonsalves',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Sugarcane_Field_Srirangapatna_Karnataka_Jul22_R16_06192.jpg',
+        'title': 'Sugarcane Field Srirangapatna Karnataka Jul22 R16 06192.jpg',
+    },
+    'finger-millet': {
+        'author': 'NimansaM',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Kurakkan_Field.jpg',
+        'title': 'Kurakkan Field.jpg',
+    },
+    'sorghum': {
+        'author': 'Daniel Georg Döhne (user Bugdream)',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Sorghum_bicolor.JPG',
+        'title': 'Sorghum bicolor.JPG',
+    },
+    'pearl-millet': {
+        'author': 'Herovaclicks',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Pearl_millet_in_summer.jpg',
+        'title': 'Pearl millet in summer.jpg',
+    },
+    'foxtail-millet': {
+        'author': 'Miquel Pujol Palol',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:LPCC-1037-Camp_de_pan%C3%ADs.jpg',
+        'title': 'LPCC-1037-Camp de panís.jpg',
+    },
+    'little-millet': {
+        'author': 'Saravananrajm',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:A_crop_%22samai_%22_grown_in_the_rain_water_only_itself.jpg',
+        'title': 'A crop "samai " grown in the rain water only itself.jpg',
+    },
+    'kodo-millet': {
+        'author': 'Kevin Faccenda',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Paspalum_scrobiculatum_224164066.jpg',
+        'title': 'Paspalum scrobiculatum 224164066.jpg',
+    },
+    'red-gram': {
+        'author': "Filo gèn'",
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Cajanus_cajan,_flowers.jpg',
+        'title': 'Cajanus cajan, flowers.jpg',
+    },
+    'bengal-gram': {
+        'author': 'Carl Davies, CSIRO',
+        'license': 'CC BY 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:CSIRO_ScienceImage_3600_Chickpeas_in_glasshouse.jpg',
+        'title': 'CSIRO ScienceImage 3600 Chickpeas in glasshouse.jpg',
+    },
+    'cowpea': {
+        'author': 'Prahlad balaji',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Cowpea_flower_and_plant.jpg',
+        'title': 'Cowpea flower and plant.jpg',
+    },
+    'sesame': {
+        'author': 'Joydeep',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Sesamum_indicum_13062014.jpg',
+        'title': 'Sesamum indicum 13062014.jpg',
+    },
+    'sunflower': {
+        'author': 'MikeLynch',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Sunflower_Field_near_Raichur,_India.jpg',
+        'title': 'Sunflower Field near Raichur, India.jpg',
+    },
+    'castor': {
+        'author': 'Cayambe',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Ricinus_communis_in_Sicily_2024.jpg',
+        'title': 'Ricinus communis in Sicily 2024.jpg',
+    },
+    'banana': {
+        'author': 'ABHIJEET',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Banana_plantation_1.jpg',
+        'title': 'Banana plantation 1.jpg',
+    },
+    'turmeric': {
+        'author': 'Thamizhpparithi Maari',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Turmeric_field.jpg',
+        'title': 'Turmeric field.jpg',
+    },
+    'small-onion': {
+        'author': 'Gajanan Jagannath Jagdale',
+        'license': 'CC0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Onion_farming.jpg',
+        'title': 'Onion farming.jpg',
+    },
+    'tomato': {
+        'author': 'Phadke09',
+        'license': 'CC BY-SA 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Tomatos_ready_for_dispatch.jpg',
+        'title': 'Tomatos ready for dispatch.jpg',
+    },
+    'brinjal': {
+        'author': 'Joydeep',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Solanum_melongena_24_08_2012_(1).JPG',
+        'title': 'Solanum melongena 24 08 2012 (1).JPG',
+    },
+    'chilli': {
+        'author': 'T. R. Shankar Raman',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Chilli_farm_Chamarajanagar_District_IMG20170828084545.jpg',
+        'title': 'Chilli farm Chamarajanagar District IMG20170828084545.jpg',
+    },
+    'bhendi': {
+        'author': 'Earth100',
+        'license': 'CC BY-SA 3.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Hong_Kong_Okra_Aug_25_2012.JPG',
+        'title': 'Hong Kong Okra Aug 25 2012.JPG',
+    },
+    'tapioca': {
+        'author': 'Ghabzman',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Cassava_plantation_farm.jpg',
+        'title': 'Cassava plantation farm.jpg',
+    },
+    'coconut': {
+        'author': 'arunpnair',
+        'license': 'CC BY-SA 2.0',
+        'source_url': 'https://commons.wikimedia.org/wiki/File:Coconut_Trees_Trivandrum.jpg',
+        'title': 'Coconut Trees Trivandrum.jpg',
+    },
+}

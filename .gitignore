@@ -1,0 +1,14 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+playwright-report/
+test-results/
+.playwright-mcp/
