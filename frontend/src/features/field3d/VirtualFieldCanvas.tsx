@@ -19,7 +19,8 @@ import { createWindUniforms } from './scene/plantMaterials';
 import { Crop } from './scene/RicePlants';
 import { bundSpot, ScaleFigures } from './scene/ScaleFigures';
 import { Wildlife } from './scene/Wildlife';
-import { computeLighting } from './sky';
+import { sceneLightingFromSky } from './sky';
+import { skyFromVisualState } from '@/features/sky/fromTimeline';
 import type { VirtualFieldProps } from './types';
 import { announceWebGLFailure, WebGLBoundary } from './WebGLBoundary';
 
@@ -75,9 +76,12 @@ export function frameField(shape: FieldShape, mode: ViewMode): Framing {
   }
   const back = Math.min(26, Math.max(7, shape.radius * 0.18));
   const inset = Math.min(14, Math.max(4, Math.min(shape.lengthM, shape.widthM) * 0.25));
+  const camY = 2.2 + back * 0.32;
+  // Look down only ~6° so the live sky fills the upper part of the frame.
+  const targetY = Math.max(0.45, camY - (back + inset) * 0.105);
   return {
-    camera: [spot.x + spot.nx * back, 2.2 + back * 0.32, spot.z + spot.nz * back],
-    target: [spot.x - spot.nx * inset, 0.45, spot.z - spot.nz * inset],
+    camera: [spot.x + spot.nx * back, camY, spot.z + spot.nz * back],
+    target: [spot.x - spot.nx * inset, targetY, spot.z - spot.nz * inset],
     minDistance: 3,
     maxDistance: Math.min(900, Math.max(45, shape.radius * 3.2)),
     viewFrom: [spot.x, spot.z],
@@ -128,7 +132,7 @@ function Effects({ quality, focusDistance }: { quality: ResolvedQuality; focusDi
 }
 
 export default function VirtualFieldCanvas({
-  state, quality = 'auto', soundEnabled = false, className, boundary, cropSlug, irrigationMethod,
+  state, quality = 'auto', soundEnabled = false, className, boundary, cropSlug, irrigationMethod, sky: skyProp,
 }: VirtualFieldProps) {
   const container = useRef<HTMLDivElement>(null);
   const visible = useOnScreen(container);
@@ -156,10 +160,8 @@ export default function VirtualFieldCanvas({
     () => (upland ? cropVisual(upland, genericStageIndex(state.rawStageKey, state.stageKey), state.stageProgress) : null),
     [upland, state.rawStageKey, state.stageKey, state.stageProgress],
   );
-  const lighting = useMemo(
-    () => computeLighting(state.hourOfDay, state.sunrise, state.sunset, cloudCover, rain),
-    [state.hourOfDay, state.sunrise, state.sunset, cloudCover, rain],
-  );
+  const sky = useMemo(() => skyProp ?? skyFromVisualState(state), [skyProp, state]);
+  const lighting = useMemo(() => sceneLightingFromSky(sky), [sky]);
 
   // Meteorological direction is where wind comes FROM; plants bend the other way.
   const windDirection = useMemo(() => {
@@ -210,14 +212,7 @@ export default function VirtualFieldCanvas({
               <PerformanceMonitor onDecline={() => quality === 'auto' && setAutoQuality('low')} flipflops={2}>
                 <AdaptiveDpr pixelated={false} />
               </PerformanceMonitor>
-              <Atmosphere
-                lighting={lighting}
-                cloudCover={cloudCover}
-                rainIntensity={rain}
-                windDirection={windDirection}
-                windSpeedKmh={windKmh}
-                humidityPct={state.humidityPct}
-              />
+              <Atmosphere sky={sky} soundEnabled={soundEnabled} />
               {upland && uplandVisual ? (
                 <Suspense fallback={null}>
                   <UplandScene

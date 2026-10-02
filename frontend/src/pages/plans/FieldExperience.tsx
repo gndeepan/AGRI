@@ -21,12 +21,14 @@ import {
   Wind,
 } from 'lucide-react'
 import { cyclesApi } from '@/api/endpoints'
-import { qk, useCycle, useLand, useTimeline, useUpdateTask } from '@/api/queries'
+import { qk, useCycle, useLand, useTimeline, useUpdateTask, useWeather } from '@/api/queries'
 import type { CycleDetail, TimelineDay } from '@/api/types'
 import { VirtualField, detectWebGL } from '@/features/field3d'
 import { WEBGL_FAILED_EVENT } from '@/features/field3d/WebGLBoundary'
 import type { FieldVisualState } from '@/features/field3d/types'
 import { Field2D } from '@/features/timeline/Field2D'
+import { applySkyToVisual, skyAtPosition } from '@/features/sky/fromTimeline'
+import type { SkyParams } from '@/features/sky/params'
 import { Timeline, stageColor, todayPosition } from '@/features/timeline/Timeline'
 import { useSimulation } from '@/stores/simulation'
 import { useUi } from '@/stores/ui'
@@ -40,6 +42,17 @@ import { DataKindBadge } from '@/components/common/DataKindBadge'
 import { AlertList } from '@/components/common/AlertList'
 import { CardSkeleton, ErrorState } from '@/components/common/States'
 import { cn } from '@/lib/utils'
+
+/**
+ * Dev-only: lets visual checks force a weather state (e.g. a thunderstorm) without real data:
+ * `window.__bhoomiSkyOverride = (p) => ({ ...p, thunder: 1, ... })`. Never active in production.
+ */
+const devSkyOverride: ((p: SkyParams) => SkyParams) | null = import.meta.env.DEV
+  ? (p) => {
+      const f = (window as unknown as { __bhoomiSkyOverride?: (p: SkyParams) => SkyParams }).__bhoomiSkyOverride
+      return f ? f(p) : p
+    }
+  : null
 
 export default function FieldExperience() {
   const { cycleId } = useParams()
@@ -175,7 +188,20 @@ function SceneLayer({ cycle, timeline }: { cycle: CycleDetail; timeline: Timelin
   // The scene is built at the true shape and scale of the drawn field.
   const land = useLand(cycle.land_id)
   const position = useSimulation((s) => s.position)
-  const state: FieldVisualState = useMemo(() => visualStateAt(timeline, position, opts), [timeline, position, opts])
+  // The same live sky as the dashboard: hourly forecast where available, else derived from the day.
+  const weather = useWeather(cycle.land_id)
+  const centroid = land.data?.metrics.centroid
+  const sky = useMemo(() => {
+    if (!centroid) return null
+    const s = skyAtPosition(timeline, position, {
+      lat: centroid.lat, lon: centroid.lon, hourly: weather.data?.hourly, utcOffsetSeconds: weather.data?.utc_offset_seconds,
+    })
+    return devSkyOverride ? { ...s, params: devSkyOverride(s.params) } : s
+  }, [timeline, position, centroid, weather.data])
+  const state: FieldVisualState = useMemo(() => {
+    const base = visualStateAt(timeline, position, opts)
+    return sky ? applySkyToVisual(base, sky) : base
+  }, [timeline, position, opts, sky])
   // Every plannable crop has a 3D scene; the 2D illustration is only the no-WebGL fallback.
   const use3D = webgl
 
@@ -188,6 +214,7 @@ function SceneLayer({ cycle, timeline }: { cycle: CycleDetail; timeline: Timelin
             boundary={land.data?.boundary}
             cropSlug={cycle.crop.slug}
             irrigationMethod={cycle.irrigation_method}
+            sky={sky?.params}
             quality={sceneQuality}
             soundEnabled={soundEnabled}
             className="absolute inset-0"

@@ -45,19 +45,27 @@ export function Rain({ intensity, windDirection, windSpeedKmh }: { intensity: nu
         uniform vec2 uSlant;
         attribute float aEnd;
         varying float vEnd;
+        varying float vFade;
         void main() {
           vEnd = aEnd;
-          float y = mod(position.y - uTime * 14.0, ${RAIN_HEIGHT.toFixed(1)});
+          float y = mod(position.y - uTime * 9.0, ${RAIN_HEIGHT.toFixed(1)});
           vec3 p = vec3(position.x, y, position.z);
           p.xz += uSlant * y * 0.25;
-          p += vec3(uSlant.x * 0.25, 1.0, uSlant.y * 0.25) * 0.45 * aEnd;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+          // ~9 m/s over a 1/60 s exposure: streaks are a few centimetres to ~15 cm, not half a metre.
+          p += vec3(uSlant.x * 0.25, 1.0, uSlant.y * 0.25) * 0.2 * aEnd;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          // Drops right in front of the lens would be huge out-of-focus blobs: fade them out,
+          // and let distant ones thin out into the rain veil the sky already draws.
+          float d = -mv.z;
+          vFade = smoothstep(2.0, 6.0, d) * (1.0 - smoothstep(26.0, 40.0, d));
+          gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
         uniform float uOpacity;
         varying float vEnd;
+        varying float vFade;
         // Brighter head, fading tail: reads as a motion-blurred drop.
-        void main() { gl_FragColor = vec4(0.8, 0.85, 0.92, uOpacity * (0.25 + 0.75 * (1.0 - vEnd))); }`,
+        void main() { gl_FragColor = vec4(0.8, 0.85, 0.92, vFade * uOpacity * (0.25 + 0.75 * (1.0 - vEnd))); }`,
     });
     return { geometry: geo, material: mat };
   }, [maxDrops]);
@@ -67,7 +75,7 @@ export function Rain({ intensity, windDirection, windSpeedKmh }: { intensity: nu
   useFrame(({ clock }) => {
     material.uniforms.uTime!.value = sceneTime(clock.elapsedTime, reducedMotion);
     (material.uniforms.uSlant!.value as THREE.Vector2).copy(windDirection).multiplyScalar(Math.min(1.2, windSpeedKmh / 30));
-    material.uniforms.uOpacity!.value = 0.18 + intensity * 0.4;
+    material.uniforms.uOpacity!.value = 0.2 + intensity * 0.32;
     geometry.setDrawRange(0, Math.floor(maxDrops * Math.min(1, intensity)) * 2);
     // Rain is only drawn in a volume around the viewer; the whole sky darkens elsewhere.
     if (group.current) group.current.position.set(camera.position.x, 0, camera.position.z);

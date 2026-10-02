@@ -147,6 +147,13 @@ function rainInWindow(win: RainWindow | null, hour: number): number {
   return win.intensity * ramp * ramp * (3 - 2 * ramp)
 }
 
+/** Rain rate (mm/h) at `hour` inside the day's rain window; 0 outside it and on climatology days. */
+export function rainRateAt(day: TimelineDay | undefined, hour: number): number {
+  const win = rainWindow(day)
+  if (!win || win.intensity <= 0) return 0
+  return (win.mm / win.hours) * (rainInWindow(win, hour) / win.intensity)
+}
+
 const DRY_HOURS = 4
 /** Surface wetness: 1 while raining, then decaying over a few hours. */
 function wetnessFrom(win: RainWindow | null, hour: number): number {

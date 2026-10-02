@@ -136,3 +136,32 @@ export function computeLighting(
     rayleigh: lerp(0.6, 3, golden) * (1 - 0.6 * overcast) + 0.2,
   };
 }
+
+/** The few lighting facts the 3D scene needs beyond the sky itself (dew, wildlife, fireflies, audio). */
+export interface SceneLighting {
+  phase: DayPhase;
+  sunElevationDeg: number;
+  daylight: number;
+  night: number;
+}
+
+/**
+ * Scene lighting facts from the shared live-sky parameters (real sun position for the field's
+ * location and time). The 3D field uses this; the 2D fallback keeps `computeLighting`.
+ */
+export function sceneLightingFromSky(sky: { sunElevation: number; sunAzimuth: number }): SceneLighting {
+  const elevationDeg = (sky.sunElevation * 180) / Math.PI;
+  // Compass azimuth: east of the meridian (< 180°) is morning in the northern tropics.
+  const morning = ((sky.sunAzimuth * 180) / Math.PI + 360) % 360 < 180;
+  let phase: DayPhase;
+  if (elevationDeg < -6) phase = 'night';
+  else if (elevationDeg < 0) phase = morning ? 'dawn' : 'dusk';
+  else if (elevationDeg < 12) phase = morning ? 'golden_morning' : 'golden_evening';
+  else phase = 'day';
+  return {
+    phase,
+    sunElevationDeg: elevationDeg,
+    daylight: smooth(-8, 10, elevationDeg),
+    night: 1 - smooth(-12, -2, elevationDeg),
+  };
+}

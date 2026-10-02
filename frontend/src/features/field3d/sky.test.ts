@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeLighting, hourFromTime } from './sky';
+import { computeLighting, hourFromTime, sceneLightingFromSky } from './sky';
 
 describe('hourFromTime', () => {
   it('parses ISO datetimes and plain times', () => {
@@ -37,5 +37,18 @@ describe('computeLighting', () => {
     const clear = computeLighting(12, rise, set, 0, 0);
     const storm = computeLighting(12, rise, set, 1, 1);
     expect(storm.sunIntensity).toBeLessThan(clear.sunIntensity * 0.4);
+  });
+});
+
+describe('sceneLightingFromSky', () => {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  it('classifies day, golden hours and night from the real sun position', () => {
+    expect(sceneLightingFromSky({ sunElevation: rad(60), sunAzimuth: rad(170) }).phase).toBe('day');
+    expect(sceneLightingFromSky({ sunElevation: rad(6), sunAzimuth: rad(95) }).phase).toBe('golden_morning');
+    expect(sceneLightingFromSky({ sunElevation: rad(6), sunAzimuth: rad(265) }).phase).toBe('golden_evening');
+    const night = sceneLightingFromSky({ sunElevation: rad(-30), sunAzimuth: rad(0) });
+    expect(night.phase).toBe('night');
+    expect(night.night).toBeCloseTo(1, 2);
+    expect(night.daylight).toBeCloseTo(0, 2);
   });
 });

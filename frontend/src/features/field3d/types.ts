@@ -1,4 +1,5 @@
 import type { Polygon } from 'geojson';
+import type { SkyParams } from '@/features/sky/params';
 
 export type GrowthStageKey = 'fallow'|'nursery'|'establishment'|'tillering'|'stem_elongation'|'panicle_initiation'|'flowering'|'grain_filling'|'maturity'|'harvested';
 export interface FieldVisualState {
@@ -26,4 +27,6 @@ export interface VirtualFieldProps {
   cropSlug?: string;
   /** 'drip' adds laterals (and mulch on vegetable beds); 'flood'/'awd' keeps furrows damp. */
   irrigationMethod?: string;
+  /** The live sky for this moment (features/sky). Lights the scene; derived from `state` if omitted. */
+  sky?: SkyParams;
 }

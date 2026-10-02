@@ -155,14 +155,16 @@ export function Backdrop() {
 
   const hills = useMemo(() => {
     const rand = mulberry32(8);
-    const d = shape.radius + 600;
+    // The delta is flat: only a low, distant ridge (Eastern Ghats foothills) on the western horizon,
+    // leaving the live sky visible above the tree line.
+    const d = shape.radius + 900;
     return Array.from({ length: 11 }, (_, i) => {
       const a = -Math.PI * 0.85 + (i / 10) * Math.PI * 0.7;
       return {
         x: shape.center[0] + Math.cos(a) * d + (rand() - 0.5) * 80,
         z: shape.center[1] + Math.sin(a) * d,
-        r: 120 + rand() * 150,
-        h: 40 + rand() * 70,
+        r: 160 + rand() * 180,
+        h: 12 + rand() * 22,
       };
     });
   }, [shape]);
