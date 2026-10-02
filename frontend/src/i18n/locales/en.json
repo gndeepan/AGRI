@@ -93,6 +93,7 @@
     "footer": "Weather: Open-Meteo · Soil: ISRIC SoilGrids · Maps: Esri, OpenStreetMap"
   },
   "auth": {
+    "scene": {"tagline": "Every season, understood.", "subtitle": "Watch a paddy season unfold, from flooded seedlings to golden harvest. The same crop model plans your own field.", "day": "Day {{day}}", "note": "Illustration of a typical Kuruvai season, not live data.", "stages": {"transplanting": "Transplanting", "tillering": "Tillering", "flowering": "Flowering", "harvest": "Harvest"}},
     "signIn": "Sign in",
     "welcomeBack": "Welcome back",
     "loginSubtitle": "Sign in to see your fields and crops.",

@@ -152,3 +152,34 @@ body {
     radial-gradient(1px 1px at 34% 92%, rgb(255 255 255 / 0.45), transparent 60%),
     radial-gradient(ellipse at 50% 120%, rgb(40 90 160 / 0.35), transparent 60%);
 }
+
+/* Auth-screen season scene (SeasonScene.tsx). Colours are driven by a rAF loop via --ss-* vars. */
+.season-scene {
+  --ss-sky-top: #4a8ccc; --ss-sky-bottom: #dcecf5; --ss-dark: 0; --ss-warm: 0; --ss-night: 0;
+  --ss-grow: 0.9; --ss-leaf: #3c7c31; --ss-grain: #d8c25e; --ss-panicle: 0.6; --ss-water: 0.6; --ss-crop: 1;
+  --ss-hill-far: #5f7d6a; --ss-hill-near: #2f4a33; --ss-palm-trunk: #4a3a28; --ss-palm-leaf: #2a4a26;
+  background: #12241a;
+}
+.season-scene .ss-grow { transform: scaleY(var(--ss-grow)); transform-box: fill-box; transform-origin: 50% 100%; }
+.season-scene .ss-sway { transform-box: fill-box; transform-origin: 50% 100%; animation: ss-sway 4.2s ease-in-out infinite; }
+.season-scene .ss-palm { animation: ss-palm 7s ease-in-out infinite; }
+.season-scene .ss-drift { animation: ss-drift 80s linear infinite; }
+.season-scene .ss-shimmer { animation: ss-shimmer 3.6s ease-in-out infinite; }
+.season-scene .ss-twinkle { animation: ss-twinkle 3s ease-in-out infinite; }
+.season-scene .ss-firefly { animation: ss-firefly 5s ease-in-out infinite; }
+.season-scene .ss-birds { animation: ss-birds 22s linear infinite; }
+.season-scene .ss-flap { animation: ss-flap 0.7s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.season-scene .ss-egret { animation: ss-egret 9s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.season-scene .ss-caption { animation: ss-caption 0.6s ease-out both; }
+.season-scene.ss-still *, .season-scene.ss-still { animation: none !important; }
+
+@keyframes ss-sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
+@keyframes ss-palm { 0%, 100% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.4deg); } }
+@keyframes ss-drift { from { transform: translateX(-260px); } to { transform: translateX(900px); } }
+@keyframes ss-shimmer { 0%, 100% { opacity: 0.2; transform: translateX(0); } 50% { opacity: 1; transform: translateX(14px); } }
+@keyframes ss-twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes ss-firefly { 0%, 100% { opacity: 0; transform: translate(0, 0); } 50% { opacity: 1; transform: translate(10px, -14px); } }
+@keyframes ss-birds { from { transform: translate(-140px, 330px); } to { transform: translate(940px, 230px); } }
+@keyframes ss-flap { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(-0.6); } }
+@keyframes ss-egret { 0%, 70%, 100% { transform: rotate(0deg); } 80% { transform: rotate(-8deg); } 90% { transform: rotate(2deg); } }
+@keyframes ss-caption { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
