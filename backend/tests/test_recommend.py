@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from app.modules.crops.recommend import SiteContext, recommend, region_for_state, score_crop
 from app.seed.crops import CROPS, SEASONS
 
@@ -35,7 +37,7 @@ def test_paddy_samba_with_full_data_is_suitable_and_data_backed():
     assert r["suitability"] == "suitable"
     assert r["confidence"] == "data_backed"
     assert r["season"]["key"] == "samba"
-    assert any("BPT 5204" in reason for reason in r["reasons"])
+    assert any("Varieties commonly listed for Samba" in reason for reason in r["reasons"])
     assert any("modelled estimates" in lim for lim in r["limitations"])
 
 
@@ -96,3 +98,74 @@ def test_out_of_season_crop_score_is_capped_below_suitable_range():
     r = score_crop(crop_dict("cotton"), ctx, SEASONS)
     assert r["suitability"] == "unsuitable"
     assert r["score"] < 45
+
+
+ALL = [crop_dict(c["slug"]) for c in CROPS if c["data"].get("plannable", True)]
+
+
+def test_two_different_fields_rank_crops_differently():
+    """Synthetic fields: a heavy-clay delta in the NE monsoon vs a sandy, dry coastal plot."""
+    delta = SiteContext(sowing_date=date(2026, 10, 2), irrigation="assured", region="IN-TN", texture="clay",
+                        ph=7.9, clay_pct=46, sand_pct=24, soil_source="soilgrids", climate=climate(26.5, 7.5),
+                        climate_years=10)
+    coast = SiteContext(sowing_date=date(2026, 10, 2), irrigation="rainfed", region="IN-TN", texture="sandy loam",
+                        ph=8.3, clay_pct=14, sand_pct=68, soil_source="soilgrids", climate=climate(28.5, 2.2),
+                        climate_years=10)
+    a = recommend(ALL, delta, SEASONS)
+    b = recommend(ALL, coast, SEASONS)
+    top_a = [r["crop_slug"] for r in a[:5]]
+    top_b = [r["crop_slug"] for r in b[:5]]
+    assert top_a != top_b
+    assert a[0]["crop_slug"] == "paddy"  # assured water + clay + monsoon
+    assert next(r for r in b if r["crop_slug"] == "paddy")["suitability"] == "unsuitable"  # rainfed on sand, dry
+    # Scores are graded, not a block of identical 100s.
+    assert len({r["score_raw"] for r in a[:8]}) >= 6
+
+
+def test_reasons_cite_the_fields_own_numbers():
+    ctx = SiteContext(sowing_date=date(2026, 10, 2), irrigation="limited", region="IN-TN", texture="clay loam",
+                      ph=7.4, clay_pct=38, sand_pct=30, soil_source="soilgrids",
+                      soil_label="SoilGrids 250 m model, 0–30 cm", climate=climate(27, 6), climate_years=10)
+    r = score_crop(crop_dict("groundnut"), ctx, SEASONS)
+    text = " ".join(r["reasons"] + r["risks"])
+    assert "clay 38 %" in text and "sand 30 %" in text
+    assert "10-yr climatology" in text
+    assert "~27.0 °C" in text or "~27 °C" in text
+    assert r["score_breakdown"].keys() == {"season", "temperature", "water", "soil"}
+
+
+def test_temperature_scored_by_distance_not_pass_fail():
+    base = dict(sowing_date=date(2026, 10, 2), irrigation="assured", region="IN-TN", texture="loam", ph=6.8)
+    near = score_crop(crop_dict("maize"), SiteContext(**base, climate=climate(26.5, 3)), SEASONS)
+    edge = score_crop(crop_dict("maize"), SiteContext(**base, climate=climate(31.5, 3)), SEASONS)
+    hot = score_crop(crop_dict("maize"), SiteContext(**base, climate=climate(35, 3)), SEASONS)
+    assert near["score_breakdown"]["temperature"] > edge["score_breakdown"]["temperature"]
+    assert edge["score_breakdown"]["temperature"] > hot["score_breakdown"]["temperature"]
+
+
+def test_neighbouring_texture_gets_partial_credit():
+    base = dict(sowing_date=date(2026, 10, 2), irrigation="assured", region="IN-TN", ph=7.0, climate=climate(27, 3))
+    crop = crop_dict("groundnut")
+    good, near, far = (score_crop(crop, SiteContext(**base, texture=t), SEASONS)["score_breakdown"]["soil"]
+                       for t in ("sandy loam", "clay loam", "silty clay"))
+    assert good > near > far
+
+
+def test_missing_soil_is_left_out_not_scored_as_a_default():
+    base = dict(sowing_date=date(2026, 10, 2), irrigation="assured", region="IN-TN", climate=climate(27, 3))
+    none = score_crop(crop_dict("maize"), SiteContext(**base), SEASONS)
+    assert none["score_breakdown"]["soil"] is None and none["unassessed"] == ["soil"]
+    assert any("No soil data" in lim for lim in none["limitations"])
+    assert none["confidence"] == "preliminary"
+    # Not a hidden mid-point: the other three factors are rescaled instead of padded with 12.5.
+    parts = none["score_breakdown"]
+    rescaled = (parts["season"] + parts["temperature"] + parts["water"]) / 75 * 100
+    assert none["score_raw"] == pytest.approx(rescaled, abs=0.05)
+    good = score_crop(crop_dict("maize"), SiteContext(**base, texture="loam", ph=6.8), SEASONS)
+    assert good["unassessed"] == []
+
+
+def test_missing_climate_leaves_temperature_and_rainfed_water_unassessed():
+    ctx = SiteContext(sowing_date=date(2026, 10, 2), irrigation="rainfed", region="IN-TN", texture="loam", ph=6.8)
+    r = score_crop(crop_dict("maize"), ctx, SEASONS)
+    assert set(r["unassessed"]) == {"temperature", "water"}

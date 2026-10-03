@@ -14,7 +14,9 @@ import { CardSkeleton, ErrorState } from '@/components/common/States'
 import { ProvenanceBadge } from '@/components/common/DataKindBadge'
 import { FieldThumb } from '@/components/common/FieldThumb'
 import { MetricsPanel } from '@/features/map/MetricsPanel'
+import { WaterSourcesCard } from '@/features/water/WaterSourcesCard'
 import { formatDate, formatNumber, i18nText } from '@/lib/format'
+import { PlanActionsMenu } from '@/features/plans/PlanActions'
 
 export default function LandDetail() {
   const { landId } = useParams()
@@ -122,6 +124,7 @@ export default function LandDetail() {
                       <div className="flex items-center gap-2">
                         <Badge variant={c.status === 'active' ? 'default' : 'outline'}>{t(`cycle.status.${c.status}`)}</Badge>
                         <Button asChild size="sm" variant="outline"><Link to={`/app/plans/${c.id}`}>{t('common.open')}</Link></Button>
+                        <PlanActionsMenu cycle={c} />
                       </div>
                     </li>
                   ))}
@@ -132,6 +135,7 @@ export default function LandDetail() {
           <Button asChild variant="ghost" className="w-full"><Link to={`/app/map?land=${l.id}`}><MapPinned /> {t('land.viewOnMap')}</Link></Button>
         </div>
       </div>
+      <WaterSourcesCard landId={l.id} boundary={l.boundary} />
     </div>
   )
 }

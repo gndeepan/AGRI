@@ -10,6 +10,7 @@ export const qk = {
   weather: (id: string) => ['lands', id, 'weather'] as const,
   soil: (id: string) => ['lands', id, 'soil'] as const,
   terrain: (id: string) => ['lands', id, 'terrain'] as const,
+  water: (id: string, radius: number) => ['lands', id, 'water', radius] as const,
   recs: (id: string, p: object) => ['lands', id, 'recs', p] as const,
   crops: ['crops'] as const,
   cycles: (p: object = {}) => ['cycles', p] as const,
@@ -38,6 +39,14 @@ export const useWeather = (id?: string) =>
   })
 export const useSoil = (id?: string) =>
   useQuery({ queryKey: qk.soil(id ?? ''), queryFn: () => landsApi.soil(id!), enabled: !!id, staleTime: 60 * 60_000 })
+export const useWaterSources = (id: string | undefined, radiusM: number, enabled = true) =>
+  useQuery({
+    queryKey: qk.water(id ?? '', radiusM),
+    queryFn: () => landsApi.waterSources(id!, radiusM),
+    enabled: !!id && enabled,
+    staleTime: 6 * 60 * 60_000,
+    retry: 1,
+  })
 export const useTerrain = (id?: string) =>
   useQuery({ queryKey: qk.terrain(id ?? ''), queryFn: () => landsApi.terrain(id!), enabled: !!id, staleTime: 60 * 60_000 })
 export const useRecommendations = (
@@ -48,6 +57,17 @@ export const useRecommendations = (
     queryKey: qk.recs(id ?? '', params),
     queryFn: () => landsApi.recommendations(id!, params),
     enabled: !!id,
+  })
+export const useAIRecommendations = (
+  id: string | undefined,
+  params: { sowing_date?: string; irrigation?: T.IrrigationAvailability },
+) =>
+  useQuery({
+    queryKey: ['lands', id ?? '', 'recs-ai', params] as const,
+    queryFn: () => landsApi.aiRecommendations(id!, params),
+    enabled: !!id,
+    staleTime: 30 * 60_000, // the server caches for 24 h; don't re-ask Gemini on every focus
+    retry: false,
   })
 export const useCrops = () => useQuery({ queryKey: qk.crops, queryFn: cropsApi.list, staleTime: 60 * 60_000 })
 export const useCycles = (p: { land_id?: string; status?: T.CycleStatus } = {}) =>

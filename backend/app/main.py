@@ -23,6 +23,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.planning.router import router as planning_router
 from app.modules.records.router import router as records_router
 from app.modules.users.router import router as users_router
+from app.modules.water.router import router as water_router
 
 log = logging.getLogger("bhoomi.api")
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
@@ -58,7 +59,7 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix="/api/v1")
     for r in (auth_router, users_router, geo_router, lands_router, environment_router, crops_router,
               planning_router, records_router, dashboard_router, assistant_router, notifications_router,
-              admin_router):
+              admin_router, water_router):
         api.include_router(r)
 
     @api.get("/health", tags=["health"])

@@ -165,6 +165,12 @@ def create_cycle(db: Session, user: User, body, env: EnvironmentService | None =
     return cycle
 
 
+def reset_status(cycle: CropCycle, today: date) -> None:
+    """After a date edit a plan may move back to 'planned' or forward to 'active'."""
+    start = date.fromisoformat(cycle.model_meta.get("start_date", cycle.anchor_date.isoformat()))
+    cycle.status = "active" if today >= start else "planned"
+
+
 def refresh_status(cycle: CropCycle, today: date) -> None:
     start = date.fromisoformat(cycle.model_meta.get("start_date", cycle.anchor_date.isoformat()))
     if cycle.status == "planned" and today >= start:

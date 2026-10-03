@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Query, Request, Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import audit
@@ -12,6 +12,7 @@ from app.modules.crops.service import resolve_variety
 from app.modules.planning import service
 from app.modules.planning.models import AgriculturalTask, CropCycle
 from app.modules.planning.schemas import CycleCreate, CyclePatch, CycleStatus, TaskIn, TaskOut, TaskPatch
+from app.modules.users.models import Notification
 
 router = APIRouter(tags=["planning"])
 
@@ -45,14 +46,27 @@ def get_cycle(cycle_id: uuid.UUID, user: CurrentUser, db: DB) -> dict:
 def patch_cycle(cycle_id: uuid.UUID, body: CyclePatch, request: Request, user: CurrentUser, db: DB) -> dict:
     cycle = service.get_owned_cycle(db, user, cycle_id)
     changes = body.model_dump(exclude_unset=True)
+    crop = service.get_crop_by_id(db, cycle.crop_id)
     if "variety_id" in changes and changes["variety_id"] is not None:
-        resolve_variety(db, user, service.get_crop_by_id(db, cycle.crop_id), changes["variety_id"])
+        resolve_variety(db, user, crop, changes["variety_id"])
+    if "method" in changes and changes["method"] not in crop.data["methods"]:
+        raise AppError(422, f"{crop.name_en} does not support method '{changes['method']}'", "invalid_method")
+    if "method" in changes and "anchor_type" not in changes:
+        changes["anchor_type"] = "transplanting" if changes["method"] == "transplanting" else "sowing"
     for key, value in changes.items():
         setattr(cycle, key, value)
+    if (cycle.method == "transplanting") != (cycle.anchor_type == "transplanting"):
+        raise AppError(422, "Transplanted crops are anchored on the transplanting date; direct-seeded crops on the "
+                       "sowing date", "invalid_anchor")
+    if cycle.method != "transplanting":
+        cycle.nursery_sowing_date = None
     if cycle.nursery_sowing_date and cycle.nursery_sowing_date >= cycle.anchor_date:
         raise AppError(422, "Nursery sowing must be before transplanting", "invalid_dates")
-    if changes.keys() & {"variety_id", "anchor_date", "nursery_sowing_date", "water_availability"}:
+    if changes.keys() & {"variety_id", "method", "anchor_type", "anchor_date", "nursery_sowing_date",
+                         "water_availability"}:
         service.compute(db, cycle)
+        if cycle.status in ("planned", "active") and "status" not in changes:
+            service.reset_status(cycle, date.today())
     audit(db, "cycle.update", user_id=user.id, request=request, entity_type="cycle", entity_id=cycle.id,
           fields=sorted(changes))
     db.commit()
@@ -63,6 +77,10 @@ def patch_cycle(cycle_id: uuid.UUID, body: CyclePatch, request: Request, user: C
 def delete_cycle(cycle_id: uuid.UUID, request: Request, user: CurrentUser, db: DB) -> Response:
     cycle = service.get_owned_cycle(db, user, cycle_id)
     cycle.deleted_at = datetime.now(UTC)
+    # Its reminders would now link to a missing plan.
+    db.execute(update(Notification).where(Notification.user_id == user.id, Notification.read_at.is_(None),
+                                          Notification.link.contains(str(cycle.id)))
+               .values(read_at=datetime.now(UTC)))
     audit(db, "cycle.delete", user_id=user.id, request=request, entity_type="cycle", entity_id=cycle.id)
     db.commit()
     return Response(status_code=204)

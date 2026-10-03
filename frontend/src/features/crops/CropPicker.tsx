@@ -1,12 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronsUpDown, Search } from 'lucide-react'
+import { Check, ChevronDown, Search } from 'lucide-react'
 import type { Crop } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { i18nText } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { dropdownChevron, dropdownVariants } from '@/components/ui/native-select'
 import { CropImage } from './CropImage'
 import { cropMatches } from './search'
 
@@ -34,7 +35,7 @@ export function CropPicker({ crops, value, onChange }: { crops: Crop[]; value: s
         <button
           type="button"
           id="crop"
-          className="flex w-full items-center gap-3 rounded-xl border border-input bg-background p-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(dropdownVariants(), 'relative flex h-auto min-h-11 items-center gap-3 py-2 pl-2 hover:bg-muted')}
         >
           {selected ? (
             <>
@@ -49,7 +50,7 @@ export function CropPicker({ crops, value, onChange }: { crops: Crop[]; value: s
           ) : (
             <span className="flex-1 px-1 text-muted-foreground">{t('crops.choose')}</span>
           )}
-          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+          <ChevronDown aria-hidden className={dropdownChevron()} />
         </button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl">

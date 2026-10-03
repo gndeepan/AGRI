@@ -357,6 +357,48 @@ export interface Recommendation {
   risks: string[]
   limitations: string[]
   inputs_used: Record<string, Provenance>
+  score_raw?: number
+  /** Points per factor; null = could not be assessed for this field (left out of the score, never defaulted). */
+  score_breakdown?: Record<'season' | 'temperature' | 'water' | 'soil', number | null>
+  unassessed?: string[]
+}
+
+export interface AIRecInput {
+  key: string
+  label: string
+  value: string
+  provenance: Provenance | null
+}
+
+export interface AIRecommendation {
+  crop: Crop
+  rank: number
+  fit: 'strong' | 'moderate' | 'weak'
+  varieties: Variety[]
+  why: string[]
+  risks: string[]
+  sowing_window: string | null
+  water_plan: string
+  confidence: 'low' | 'medium' | 'high'
+}
+
+export interface AIRecommendations {
+  kind: 'ai_generated'
+  status: 'ok' | 'unavailable' | 'insufficient_data'
+  reason: string | null
+  missing?: string[]
+  land: { id: string; name: string }
+  sowing_date: string
+  irrigation: IrrigationAvailability
+  summary: string | null
+  recommendations: AIRecommendation[]
+  inputs: AIRecInput[]
+  data_gaps: string[]
+  model: string | null
+  generated_at: string | null
+  cached: boolean
+  dropped_claims: number
+  disclaimer: string
 }
 
 export interface DateRange3 {
@@ -573,4 +615,36 @@ export interface NotificationOut {
   link: string | null
   read_at: string | null
   created_at: string
+}
+
+export type WaterKind = 'river' | 'canal' | 'stream' | 'drain' | 'tank' | 'pond' | 'lake' | 'well'
+export type Compass = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW'
+
+export interface WaterSource {
+  id: string
+  osm_ids: string[]
+  osm_url: string
+  name: string | null
+  name_ta: string | null
+  kind: WaterKind
+  seasonal: boolean
+  /** From the drawn field boundary to the nearest mapped edge. */
+  distance_m: number
+  adjoining: boolean
+  bearing_deg: number | null
+  direction: Compass | null
+  area_m2: number | null
+  length_in_radius_m: number | null
+  nearest_point: { lat: number; lon: number }
+  field_point: { lat: number; lon: number }
+  geometry: import('geojson').Geometry
+}
+
+export interface WaterSources {
+  radius_m: number
+  sources: WaterSource[]
+  counts_by_kind: Partial<Record<WaterKind, number>>
+  nearest_by_kind: Partial<Record<WaterKind, { id: string; name: string | null; distance_m: number; direction: Compass | null }>>
+  provenance: Provenance
+  limitations: string[]
 }

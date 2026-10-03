@@ -7,6 +7,7 @@ import { useSimulation } from '@/stores/simulation'
 import { dayIndexForDate, hourLabel, stageMarkers } from '@/lib/timeline'
 import { formatDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { NativeSelect } from '@/components/ui/native-select'
 import { cn } from '@/lib/utils'
 
 export const STAGE_COLORS: Record<string, string> = {
@@ -173,11 +174,11 @@ export function Timeline({ timeline, stageName }: Props) {
           <Button size="icon-sm" variant="ghost" onClick={() => seek(useSimulation.getState().position + 1)} aria-label={t('timeline.nextDay')}><ChevronRight /></Button>
           <Button size="icon-sm" variant="ghost" onClick={() => jumpStage(1)} aria-label={t('timeline.nextStage')} title={t('timeline.nextStage')}><SkipForward /></Button>
         </div>
-        <label className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs">
+        <label className="flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground">{t('timeline.speed')}</span>
-          <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="bg-transparent font-semibold outline-none" aria-label={t('timeline.speed')}>
+          <NativeSelect size="xs" className="w-auto" selectClassName="font-semibold" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label={t('timeline.speed')}>
             {SPEEDS.map((s) => <option key={s} value={s}>{t('timeline.speedValue', { n: s })}</option>)}
-          </select>
+          </NativeSelect>
         </label>
         <label className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs">
           <CalendarDays className="size-3.5 text-muted-foreground" />

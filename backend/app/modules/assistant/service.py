@@ -15,6 +15,7 @@ from app.modules.lands.models import LandProfile
 from app.modules.planning import service as planning
 from app.modules.planning.models import AgriculturalTask, CropCycle, FieldObservation
 from app.modules.users.models import User
+from app.modules.water.service import WaterService
 
 log = logging.getLogger(__name__)
 LANG_NAMES = {"en": "English", "ta": "Tamil"}
@@ -68,6 +69,15 @@ def build_context(db: Session, user: User, land: LandProfile | None, cycle: Crop
             }
         except AppError:
             ctx["weather"] = {"unavailable": True}
+        # Water sources only from the cache (never a live provider call while chatting).
+        water = WaterService().cached(land.id, next(b for b in reversed(land.boundaries) if b.is_current)
+                                      .metrics["geojson"])
+        if water is not None:
+            ctx["nearby_water"] = {
+                "kind": "estimate", "source": "OpenStreetMap", "radius_m": water["radius_m"],
+                "nearest_by_kind": water["nearest_by_kind"], "counts_by_kind": water["counts_by_kind"],
+                "caveat": "OSM coverage varies; mapped water bodies may be seasonal or dry.",
+            }
         test = db.scalar(select(SoilTest).where(SoilTest.land_id == land.id, SoilTest.deleted_at.is_(None))
                          .order_by(SoilTest.sample_date.desc()).limit(1))
         if test is not None:

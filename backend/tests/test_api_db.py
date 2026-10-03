@@ -236,3 +236,82 @@ def test_account_deletion(api):
     assert c.request("DELETE", "/api/v1/users/me", json={"password": "paddy-field-2026"}).status_code == 204
     assert api().post("/api/v1/auth/login", json={"email": "farmer@example.com",
                                                   "password": "paddy-field-2026"}).status_code == 401
+
+
+def test_cycle_edit_and_delete(api, db):
+    from app.modules.users.models import Notification, User
+
+    c = api()
+    register(c)
+    land = make_land(c)
+    anchor = date.today() - timedelta(days=10)
+    cycle = c.post("/api/v1/cycles", json={
+        "land_id": land["id"], "crop_slug": "paddy", "method": "transplanting", "anchor_date": str(anchor),
+        "anchor_type": "transplanting", "irrigation_method": "flood", "water_availability": "assured"}).json()
+    cid = cycle["id"]
+    assert cycle["status"] == "active"
+
+    # Moving the anchor into the future recomputes stages and returns the plan to 'planned'.
+    future = date.today() + timedelta(days=30)
+    r = c.patch(f"/api/v1/cycles/{cid}", json={"anchor_date": str(future), "notes": "moved (synthetic)"})
+    assert r.status_code == 200, r.text
+    moved = r.json()
+    assert moved["status"] == "planned" and moved["anchor_date"] == str(future) and moved["notes"] == "moved (synthetic)"
+    assert moved["harvest_window"]["expected"] > cycle["harvest_window"]["expected"]
+
+    # Switching to direct seeding re-anchors on sowing and drops the nursery date.
+    r = c.patch(f"/api/v1/cycles/{cid}", json={"method": "direct_seeding_wet"})
+    assert r.status_code == 200, r.text
+    assert r.json()["anchor_type"] == "sowing" and r.json()["nursery_sowing_date"] is None
+    assert "nursery" not in [s["key"] for s in r.json()["stages"]]
+
+    assert c.patch(f"/api/v1/cycles/{cid}", json={"method": "sowing_by_drone"}).status_code == 422
+    assert c.patch(f"/api/v1/cycles/{cid}", json={"anchor_date": None}).status_code == 422
+    mismatched = {"method": "direct_seeding_wet", "anchor_type": "transplanting"}
+    assert c.patch(f"/api/v1/cycles/{cid}", json=mismatched).status_code == 422
+
+    # Another user can neither edit nor delete it.
+    other = api()
+    register(other, email="other@example.com")
+    assert other.patch(f"/api/v1/cycles/{cid}", json={"notes": "x"}).status_code == 404
+    assert other.delete(f"/api/v1/cycles/{cid}").status_code == 404
+
+    user_id = db.scalar(select(User.id).where(User.email == "farmer@example.com"))
+    db.add(Notification(user_id=user_id, kind="task", title="Reminder", link=f"/app/plans/{cid}", dedupe_key="t1"))
+    db.commit()
+
+    assert c.delete(f"/api/v1/cycles/{cid}").status_code == 204
+    assert c.get(f"/api/v1/cycles/{cid}").status_code == 404
+    assert all(x["id"] != cid for x in c.get("/api/v1/cycles").json())
+    assert c.get(f"/api/v1/lands/{land['id']}").json()["active_cycle"] is None
+    assert c.get("/api/v1/dashboard").json()["totals"]["active_cycles"] == 0
+    assert all(n["read_at"] for n in c.get("/api/v1/notifications").json())
+
+
+def test_water_sources_endpoint_ownership_and_provider_failure(api, monkeypatch):
+    from app.core.errors import AppError
+    from app.modules.water.service import WaterService
+
+    calls = []
+
+    def fake_nearby(self, land_id, boundary, radius_m=5000):
+        calls.append(radius_m)
+        return {"radius_m": radius_m, "sources": [], "counts_by_kind": {}, "nearest_by_kind": {},
+                "provenance": {"kind": "estimate"}, "limitations": []}
+
+    monkeypatch.setattr(WaterService, "nearby", fake_nearby)
+    a, b = api(), api()
+    register(a)
+    register(b, email="other@example.com")
+    land = make_land(a)
+    ok = a.get(f"/api/v1/lands/{land['id']}/water-sources", params={"radius_m": 2000})
+    assert ok.status_code == 200 and calls == [2000]
+    assert a.get(f"/api/v1/lands/{land['id']}/water-sources", params={"radius_m": 99999}).status_code == 422
+    assert b.get(f"/api/v1/lands/{land['id']}/water-sources").status_code == 404
+
+    def failing(self, land_id, boundary, radius_m=5000):
+        raise AppError(503, "unavailable", "water_sources_unavailable")
+
+    monkeypatch.setattr(WaterService, "nearby", failing)
+    r = a.get(f"/api/v1/lands/{land['id']}/water-sources")
+    assert r.status_code == 503 and r.json()["code"] == "water_sources_unavailable"

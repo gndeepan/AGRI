@@ -8,6 +8,7 @@ import { WeatherIcon, weatherCodeKey } from '@/components/common/WeatherIcon'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatNumber, windDirLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { NativeSelect } from '@/components/ui/native-select'
 import { LiveSky } from './LiveSky'
 import { toSkyParams, type WeatherLike } from './params'
 import { loadSoundPreference, saveSoundPreference, weatherAudio } from './thunder'
@@ -120,14 +121,17 @@ export function WeatherNowCard({ landId, fields, onLandChange, showLink = true, 
               {hour ? t('sky.atTime', { time: hourLabel(hour.time), day: hour.time.slice(8, 10) }) : t('sky.nowAt')}
             </div>
             {fields && fields.length > 1 ? (
-              <select
+              <NativeSelect
                 value={landId}
                 onChange={(e) => onLandChange?.(e.target.value)}
                 aria-label={t('sky.selectField')}
-                className="mt-1 max-w-full truncate rounded-lg border border-white/25 bg-black/25 px-2 py-1 text-sm font-medium backdrop-blur-md [text-shadow:none] focus:outline-none focus:ring-2 focus:ring-white/60"
+                variant="glass"
+                size="sm"
+                className="mt-1 w-auto max-w-full"
+                selectClassName="font-medium [text-shadow:none]"
               >
-                {fields.map((f) => <option key={f.id} value={f.id} className="text-black">{f.name}</option>)}
-              </select>
+                {fields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </NativeSelect>
             ) : (
               fieldName && <div className="mt-1 truncate text-sm font-medium">{fieldName}</div>
             )}

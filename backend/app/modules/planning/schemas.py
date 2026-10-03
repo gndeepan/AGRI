@@ -40,12 +40,22 @@ class CycleCreate(BaseModel):
 class CyclePatch(BaseModel):
     variety_id: uuid.UUID | None = None
     status: CycleStatus | None = None
+    method: Method | None = None
+    anchor_type: Literal["sowing", "transplanting"] | None = None
     anchor_date: date | None = None
     nursery_sowing_date: date | None = None
     irrigation_method: IrrigationMethod | None = None
     water_availability: WaterAvailability | None = None
     planting_density: str | None = Field(default=None, max_length=120)
     notes: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def no_null_required(self) -> "CyclePatch":
+        # Optional in a PATCH, but these columns can't be cleared.
+        for key in ("status", "method", "anchor_type", "anchor_date", "irrigation_method", "water_availability"):
+            if key in self.model_fields_set and getattr(self, key) is None:
+                raise ValueError(f"{key} cannot be null")
+        return self
 
 
 class TaskIn(BaseModel):

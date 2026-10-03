@@ -30,18 +30,5 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
 )
 Textarea.displayName = 'Textarea'
 
-export const NativeSelect = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ className, children, ...props }, ref) => (
-    <select
-      ref={ref}
-      className={cn(
-        'flex h-11 w-full appearance-none rounded-xl border border-input bg-card bg-[url("data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%235e665c%27 stroke-width=%272%27><path d=%27m6 9 6 6 6-6%27/></svg>")] bg-[length:14px] bg-[right_0.9rem_center] bg-no-repeat px-3.5 pr-9 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </select>
-  ),
-)
-NativeSelect.displayName = 'NativeSelect'
+// Kept here for existing imports; the shared dropdown primitive lives in native-select.tsx.
+export { NativeSelect } from './native-select'

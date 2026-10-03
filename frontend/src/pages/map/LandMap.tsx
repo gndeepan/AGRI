@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   ChevronUp,
   Crosshair,
+  Droplets,
   Layers as LayersIcon,
   Loader2,
   Pencil,
@@ -30,6 +31,7 @@ import { useAuth } from '@/stores/auth'
 import { useUi, type MapLayer } from '@/stores/ui'
 import { applyBaseLayer, baseStyle, DEFAULT_CENTER, DEFAULT_ZOOM } from '@/features/map/basemaps'
 import { SearchBox } from '@/features/map/SearchBox'
+import { WaterLegend, useWaterMapLayer } from '@/features/water/useWaterMapLayer'
 import { MetricsPanel } from '@/features/map/MetricsPanel'
 import { isSelfIntersecting, previewMetrics } from '@/lib/geo'
 import { formatArea } from '@/lib/format'
@@ -98,6 +100,7 @@ export default function LandMap() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [layerMenu, setLayerMenu] = useState(false)
   const [locating, setLocating] = useState(false)
+  const [waterOn, setWaterOn] = useState(params.get('water') === '1')
 
   const setParamsRef = useRef(setParams)
   useEffect(() => {
@@ -108,6 +111,8 @@ export default function LandMap() {
   const editId = params.get('edit')
   const editingLand = useMemo(() => lands.data?.find((l) => l.id === editId) ?? null, [lands.data, editId])
   const selectedLand = useMemo(() => lands.data?.find((l) => l.id === selectedId) ?? null, [lands.data, selectedId])
+
+  const water = useWaterMapLayer(mapRef, ready, selectedLand?.id ?? null, waterOn)
 
   // ---- map + draw init (once) ----
   useEffect(() => {
@@ -531,6 +536,19 @@ export default function LandMap() {
               </div>
             )}
           </div>
+          {selectedLand && mode === 'browse' && (
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn('glass shadow-lg', waterOn && 'text-sky-deep ring-2 ring-sky-deep')}
+              onClick={() => setWaterOn((v) => !v)}
+              aria-label={t('waterSources.mapToggle')}
+              aria-pressed={waterOn}
+              title={t('waterSources.mapToggle')}
+            >
+              <Droplets />
+            </Button>
+          )}
           <Button variant="outline" size="icon" className="glass shadow-lg" onClick={locate} aria-label={t('map.myLocation')} disabled={locating}>
             {locating ? <Loader2 className="animate-spin" /> : <Crosshair />}
           </Button>
@@ -557,6 +575,10 @@ export default function LandMap() {
             </Button>
           )}
         </div>
+
+        {waterOn && selectedLand && mode === 'browse' && (
+          <WaterLegend query={water} className="absolute bottom-44 left-3 z-10 sm:left-4 lg:bottom-12" />
+        )}
 
         {mode === 'browse' && !selectedLand && (
           <div className="absolute inset-x-0 bottom-28 z-10 flex justify-center lg:bottom-8">

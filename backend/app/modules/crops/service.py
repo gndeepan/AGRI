@@ -5,11 +5,13 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import get_settings
 from app.core.errors import AppError, not_found
 from app.core.http import ProviderError
 from app.modules.crops.models import CropCatalog, CropVariety
 from app.modules.crops.recommend import SiteContext, recommend, region_for_state
 from app.modules.environment.models import SoilTest
+from app.modules.environment.providers.soilgrids import DEPTH_WEIGHTS
 from app.modules.environment.service import EnvironmentService
 from app.modules.lands.models import LandProfile
 from app.modules.users.models import User
@@ -87,8 +89,17 @@ def _scoring_dict(crop: CropCatalog) -> dict:
         "slug": crop.slug, "data": crop.data, "confidence": crop.confidence,
         "rules": [{"region": r.region, "season_key": r.season_key, "sowing_start": r.sowing_start,
                    "sowing_end": r.sowing_end} for r in crop.rules],
-        "varieties": [{"name": v.name, "seasons": v.seasons} for v in crop.varieties],
+        "varieties": [{"name": v.name, "seasons": v.seasons, "verified": v.verified} for v in crop.varieties],
     }
+
+
+def topsoil_average(layers: list[dict], key: str) -> float | None:
+    """Depth-weighted 0–30 cm mean of a SoilGrids property, or None when no layer has it."""
+    rows = [r for r in layers if r.get(key) is not None and r.get("depth") in DEPTH_WEIGHTS]
+    if not rows:
+        return None
+    weight = sum(DEPTH_WEIGHTS[r["depth"]] for r in rows)
+    return round(sum(r[key] * DEPTH_WEIGHTS[r["depth"]] for r in rows) / weight, 1)
 
 
 def site_context(db: Session, land: LandProfile, sowing_date: date, irrigation: str,
@@ -99,22 +110,27 @@ def site_context(db: Session, land: LandProfile, sowing_date: date, irrigation: 
                      .order_by(SoilTest.sample_date.desc()).limit(1))
     if test is not None and (test.ph is not None or test.texture):
         ctx.ph, ctx.texture, ctx.soil_source = test.ph, (test.texture or None), "soil_test"
-        ctx.texture = ctx.texture.lower() if ctx.texture else None
+        ctx.texture = ctx.texture.strip().lower() if ctx.texture else None
+        ctx.soil_label = f"your soil test of {test.sample_date}"
         ctx.provenance["soil"] = {"provider": "farmer", "dataset": f"Soil test {test.sample_date}",
                                   "kind": "user_entered", "retrieved_at": test.created_at.isoformat(),
                                   "cache_status": "fresh", "notes": []}
     else:
         try:
             soil = env.soil_profile(land.centroid_lat, land.centroid_lon, land.id)
+            layers = soil.get("layers", [])
             ctx.texture = soil.get("texture_class")
-            phs = [lyr["ph"] for lyr in soil.get("layers", []) if lyr.get("ph") is not None]
-            ctx.ph = round(sum(phs) / len(phs), 1) if phs else None
+            ctx.ph = topsoil_average(layers, "ph")
+            ctx.clay_pct = topsoil_average(layers, "clay_pct")
+            ctx.sand_pct = topsoil_average(layers, "sand_pct")
             ctx.soil_source = "soilgrids"
+            ctx.soil_label = "SoilGrids 250 m model, 0–30 cm"
             ctx.provenance["soil"] = soil["provenance"]
         except AppError as exc:
             log.info("soil unavailable for recommendations", extra={"error": exc.detail})
     try:
         ctx.climate, ctx.provenance["climate"] = env.climatology(land.centroid_lat, land.centroid_lon)
+        ctx.climate_years = get_settings().climatology_years
     except ProviderError as exc:
         log.info("climatology unavailable for recommendations", extra={"error": str(exc)})
     return ctx

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/common/PageHeader'
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/common/States'
 import { formatDate, i18nText } from '@/lib/format'
+import { PlanActionsMenu } from '@/features/plans/PlanActions'
 
 export default function Plans() {
   const { t, i18n } = useTranslation()
@@ -26,25 +27,29 @@ export default function Plans() {
           {q.data.map((c) => {
             const stage = c.stages.find((s) => s.key === c.current?.stage_key)
             return (
-              <Link key={c.id} to={`/app/plans/${c.id}`} className="group overflow-hidden rounded-2xl border border-border bg-card transition hover:-translate-y-0.5 hover:shadow-lg">
-                <div className="h-2 bg-muted"><div className="h-full bg-gradient-to-r from-paddy-400 to-sun-500" style={{ width: `${Math.round((c.current?.stage_progress ?? 0) * 100)}%` }} /></div>
-                <div className="space-y-2 p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h2 className="font-display text-xl font-semibold">{i18nText(c.crop.name, lang)}{c.variety ? ` · ${c.variety.name}` : ''}</h2>
-                      <p className="text-sm text-muted-foreground">{c.land_name}</p>
+              <div key={c.id} className="relative">
+                <Link to={`/app/plans/${c.id}`} className="group block overflow-hidden rounded-2xl border border-border bg-card transition hover:-translate-y-0.5 hover:shadow-lg">
+                  <div className="h-2 bg-muted"><div className="h-full bg-gradient-to-r from-paddy-400 to-sun-500" style={{ width: `${Math.round((c.current?.stage_progress ?? 0) * 100)}%` }} /></div>
+                  <div className="space-y-2 p-5">
+                    <div className="flex items-start justify-between gap-2 pr-9">
+                      <div>
+                        <h2 className="font-display text-xl font-semibold">{i18nText(c.crop.name, lang)}{c.variety ? ` · ${c.variety.name}` : ''}</h2>
+                        <p className="text-sm text-muted-foreground">{c.land_name}</p>
+                      </div>
+                      <Badge variant={c.status === 'active' ? 'default' : 'outline'}>{t(`cycle.status.${c.status}`)}</Badge>
                     </div>
-                    <Badge variant={c.status === 'active' ? 'default' : 'outline'}>{t(`cycle.status.${c.status}`)}</Badge>
+                    <p className="text-sm">{stage ? i18nText(stage.name, lang) : '—'}{c.current ? ` · ${t('timeline.das', { n: c.current.das })}` : ''}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('plans.harvestRange', {
+                        from: formatDate(c.harvest_window.earliest, 'd MMM', lang),
+                        to: formatDate(c.harvest_window.latest, 'd MMM yyyy', lang),
+                      })}
+                    </p>
                   </div>
-                  <p className="text-sm">{stage ? i18nText(stage.name, lang) : '—'}{c.current ? ` · ${t('timeline.das', { n: c.current.das })}` : ''}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t('plans.harvestRange', {
-                      from: formatDate(c.harvest_window.earliest, 'd MMM', lang),
-                      to: formatDate(c.harvest_window.latest, 'd MMM yyyy', lang),
-                    })}
-                  </p>
-                </div>
-              </Link>
+                </Link>
+                {/* Sibling of the link: buttons can't be nested inside an anchor. */}
+                <PlanActionsMenu cycle={c} className="absolute right-3 top-5" />
+              </div>
             )
           })}
         </div>

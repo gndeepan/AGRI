@@ -1,23 +1,28 @@
 import * as React from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
+import type { VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
+import { dropdownChevron, dropdownVariants } from './native-select'
 
 export const Select = SelectPrimitive.Root
 export const SelectValue = SelectPrimitive.Value
 
-export function SelectTrigger({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
+export function SelectTrigger({
+  className,
+  children,
+  variant,
+  size,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Trigger> & VariantProps<typeof dropdownVariants>) {
   return (
     <SelectPrimitive.Trigger
-      className={cn(
-        'flex h-11 w-full items-center justify-between rounded-xl border border-input bg-card px-3.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        className,
-      )}
+      className={cn(dropdownVariants({ variant, size }), 'relative flex items-center data-[placeholder]:text-muted-foreground', className)}
       {...props}
     >
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
       <SelectPrimitive.Icon asChild>
-        <ChevronDown className="size-4 opacity-60" />
+        <ChevronDown aria-hidden className={dropdownChevron({ variant, size })} />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )

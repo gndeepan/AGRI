@@ -1,5 +1,6 @@
 {
   "common": {
+    "close": "Close",
     "retry": "Try again",
     "offline": "You're offline — showing saved data where available.",
     "unavailable": "Not available",
@@ -92,6 +93,7 @@
     "trustBody": "Farming decisions need honest information. Bhoomi labels each piece of data so you know how much to rely on it.",
     "footer": "Weather: Open-Meteo · Soil: ISRIC SoilGrids · Maps: Esri, OpenStreetMap"
   },
+  "waterSources": {"title": "Nearby water sources", "subtitle": "Rivers, canals, tanks (eri / kanmai), ponds (kulam) and wells mapped around this field.", "within": "Within {{km}} km", "all": "All", "kind": {"river": "River", "canal": "Canal", "stream": "Stream", "drain": "Drain / ditch", "tank": "Tank (eri / kanmai)", "pond": "Pond (kulam / ooruni)", "lake": "Lake / reservoir", "well": "Well"}, "dir": {"N": "north", "NE": "north-east", "E": "east", "SE": "south-east", "S": "south", "SW": "south-west", "W": "west", "NW": "north-west"}, "away": "{{distance}} away", "adjoining": "Touches your field", "toThe": "to the {{dir}}", "seasonal": "May be seasonal", "unnamed": "Unnamed {{kind}}", "area": "Area {{area}}", "length": "{{length}} within range", "nearest": "Nearest: {{name}}, {{distance}} {{dir}}", "empty": "No mapped water sources within {{km}} km. OpenStreetMap may be incomplete here.", "emptyKind": "No {{kind}} within {{km}} km.", "error": "Couldn't load nearby water sources. The map data service may be busy.", "retry": "Try again", "loading": "Looking for water sources around your field…", "showOnMap": "Show on map", "mapToggle": "Water sources", "mapLegend": "Water sources", "openOsm": "View on OpenStreetMap", "stale": "Showing saved results; the map data service is busy right now.", "attribution": "Map data © OpenStreetMap contributors (ODbL)", "fieldLabel": "Your field", "showMore": "Show all {{n}}", "showLess": "Show fewer", "radiusLabel": "Search radius"},
   "auth": {
     "scene": {"tagline": "Every season, understood.", "subtitle": "Watch a paddy season unfold, from flooded seedlings to golden harvest. The same crop model plans your own field.", "day": "Day {{day}}", "note": "Illustration of a typical Kuruvai season, not live data.", "stages": {"transplanting": "Transplanting", "tillering": "Tillering", "flowering": "Flowering", "harvest": "Harvest"}},
     "signIn": "Sign in",
@@ -365,6 +367,9 @@
     "lab": "Laboratory",
     "saved": "Soil test saved"
   },
+  "ai": {"title": "AI recommendations for {{name}}", "subtitle": "Gemini reads this field's own location, soil, weather and season, then ranks crops from our catalog.", "badge": "AI-generated", "disclaimer": "AI-generated from this field's data. Verify with your local agriculture officer, KVK or seed supplier before deciding.", "loading": "Reading this field's data and asking the AI…", "unavailableTitle": "AI recommendations are unavailable", "unavailableBody": "We won't show guessed crops instead. The rule-based list below still uses this field's data.", "insufficientTitle": "Not enough data for this field", "insufficientBody": "AI recommendations need soil and climate data for this exact location. Missing:", "addSoilTest": "Add a soil test", "retry": "Try again", "fit": {"strong": "Strong fit", "moderate": "Moderate fit", "weak": "Weak fit"}, "confidence": {"low": "Low confidence", "medium": "Medium confidence", "high": "High confidence"}, "why": "Why it suits this field", "risks": "Watch out for", "waterPlan": "Water plan", "sowingWindow": "Sowing window", "varieties": "Suggested varieties", "generated": "Generated {{time}} by {{model}}", "cached": "from today's saved answer", "gaps": "Data gaps", "dataUsed": "Data used for this field", "dataUsedHint": "Everything the AI saw about this field, with its source. Nothing else was sent.",
+  "dataFoundHint": "What we retrieved for this field, with its source.", "droppedNote": "{{count}} statement(s) were removed because they did not match this field's data or our catalog."},
+  "rules": {"title": "Rule-based suitability", "subtitle": "A transparent score from season window, temperature, water balance and soil — each reason cites this field's numbers.", "unassessed": "Not assessed: {{list}}. These were left out of the score instead of guessed.", "factor": {"season": "season", "temperature": "temperature", "water": "water", "soil": "soil"}, "breakdown": "Score breakdown"},
   "discover": {
     "title": "Crops for this field",
     "subtitle": "Ranked by season, climate, soil and water — with reasons and limitations.",
@@ -469,6 +474,7 @@
     "useThis": "Use this variety"
   },
   "plan": {
+    "actions": { "menu": "Plan actions", "edit": "Edit plan", "delete": "Delete plan", "editTitle": "Edit crop plan", "editSubtitle": "Changing the dates, variety or method recalculates stage dates and reminders. Completed tasks are kept.", "save": "Save changes", "saved": "Plan updated", "deleteTitle": "Delete this crop plan?", "deleteBody": "{{crop}} on {{field}} will be removed from your plans, dashboard and reminders. Your records (observations, irrigation, inputs) are kept and an administrator can restore the plan.", "deleteConfirm": "Delete plan", "deleted": "Plan deleted", "cancel": "Cancel" },
     "eyebrow": "Crop plan",
     "title": "Plan a crop season",
     "subtitle": "Tell us what you'll grow and when. You can edit everything later.",
@@ -672,6 +678,7 @@
     "circuit": { "closed": "Healthy", "half_open": "Recovering", "open": "Circuit open" }
   },
   "notifications": {
+    "markAll": "Mark all read",
     "label": "Notifications ({{count}} unread)",
     "title": "Notifications",
     "none": "You're all caught up."

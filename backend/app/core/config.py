@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     open_meteo_api_key: str | None = None
     soilgrids_url: str = "https://rest.isric.org/soilgrids/v2.0/properties/query"
     nominatim_url: str = "https://nominatim.openstreetmap.org"
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
+    water_cache_days: int = 7
 
     weather_cache_minutes: int = 10  # live conditions; Open-Meteo current updates every 15 min
     soil_cache_days: int = 30

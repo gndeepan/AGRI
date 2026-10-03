@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ChevronsUpDown, Loader2, Search, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, Loader2, Search, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react'
 import { cropsApi } from '@/api/endpoints'
 import { ApiError } from '@/api/client'
 import { qk } from '@/api/queries'
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { i18nText } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { dropdownChevron, dropdownVariants } from '@/components/ui/native-select'
 import { formatRange, groupVarieties } from './search'
 
 interface Props {
@@ -43,7 +44,7 @@ export function VarietyPicker({ crop, value, onChange, region }: Props) {
         <button
           type="button"
           id="variety"
-          className="flex w-full items-center gap-3 rounded-xl border border-input bg-background px-3 py-2.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(dropdownVariants(), 'relative flex h-auto min-h-11 items-center gap-3 py-2.5 pl-3.5 hover:bg-muted')}
         >
           <span className="min-w-0 flex-1">
             {selected ? (
@@ -66,7 +67,7 @@ export function VarietyPicker({ crop, value, onChange, region }: Props) {
               </>
             )}
           </span>
-          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+          <ChevronDown aria-hidden className={dropdownChevron()} />
         </button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">

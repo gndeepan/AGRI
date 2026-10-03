@@ -294,3 +294,21 @@ docker-compose.yml, .env.example, Makefile
 * Honesty rules: lightning is drawn only for WMO thunderstorm codes 95/96/99; rain only when the model reports precipitation or a rain code; the strike timing and position are simulated. The UI states that this is model data, not radar or lightning sensors.
 * Photosensitivity: at most one lightning event per 2.4 s, capped flash brightness, and no flashes at all under `prefers-reduced-motion`.
 * Dev gallery of every state: `/dev/sky` (development builds only), `?only=<key>`, `&bolt=1`.
+
+## 9. Nearby water sources
+
+`GET /lands/{id}/water-sources?radius_m=` (500–15000, default 5000; owner-only; rate limited 20/min) →
+```ts
+WaterSource = { id: "way/123"; osm_ids: string[]; osm_url: string; name: string|null; name_ta: string|null;
+  kind: "river"|"canal"|"stream"|"drain"|"tank"|"pond"|"lake"|"well"; seasonal: boolean;
+  distance_m: number /* from the drawn field boundary to the nearest mapped edge */; adjoining: boolean;
+  bearing_deg: number|null; direction: "N"|"NE"|…|null; area_m2: number|null; length_in_radius_m: number|null;
+  nearest_point: LatLon; field_point: LatLon; geometry: GeoJSON /* simplified, clipped to ~1.15×radius */ }
+WaterSources = { radius_m; sources: WaterSource[] /* sorted by distance, ≤60 */;
+  counts_by_kind: Record<kind, number>; nearest_by_kind: Record<kind, {id,name,distance_m,direction}>;
+  provenance: Provenance /* kind "estimate", ODbL, cache_status fresh|cached|stale */; limitations: string[] }
+```
+Source: OSM via Overpass (one bbox query, `out geom`), cached 7 days (stale copy served if the provider fails;
+`503 water_sources_unavailable` if there is none). `tank` covers irrigation tanks (Eri / Kanmai / Kammai), `pond` village
+ponds (Kulam / Ooruni / Thangal). Pools, water parks, wastewater and culverted channels are excluded; `intermittent=yes`
+is flagged `seasonal`. Named river/canal segments are merged. The assistant context carries cached results only.

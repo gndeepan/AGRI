@@ -59,7 +59,7 @@ def refresh_cycles(db: Session) -> int:
             planning.refresh_status(cycle, today)
         except AppError as exc:
             log.warning("cycle refresh skipped", extra={"cycle_id": str(cycle.id), "error": exc.detail})
-        link = f"/fields/{land.id}/cycles/{cycle.id}"
+        link = f"/app/plans/{cycle.id}"
         for alert in (bundle or {}).get("alerts", []):
             notify(db, cycle.owner_id, "alert", f"{land.name}: {alert['title']}", alert["message"], link,
                    f"{alert['id']}:{land.id}")

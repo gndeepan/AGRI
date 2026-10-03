@@ -43,8 +43,12 @@ export const landsApi = {
     api<T.SoilTest>(`/lands/${id}/soil-tests`, { method: 'POST', body: body as unknown as Record<string, unknown> }),
   removeSoilTest: (id: string, testId: string) => api<void>(`/lands/${id}/soil-tests/${testId}`, { method: 'DELETE' }),
   terrain: (id: string) => api<T.Terrain>(`/lands/${id}/terrain`),
+  waterSources: (id: string, radius_m: number) =>
+    api<T.WaterSources>(`/lands/${id}/water-sources${qs({ radius_m })}`),
   recommendations: (id: string, params: { sowing_date?: string; irrigation?: T.IrrigationAvailability }) =>
     api<T.Recommendation[]>(`/lands/${id}/recommendations${qs(params)}`),
+  aiRecommendations: (id: string, params: { sowing_date?: string; irrigation?: T.IrrigationAvailability }) =>
+    api<T.AIRecommendations>(`/lands/${id}/recommendations/ai${qs(params)}`),
 }
 
 export const cropsApi = {

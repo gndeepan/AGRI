@@ -18,6 +18,7 @@ import { FieldThumb } from '@/components/common/FieldThumb'
 import { formatArea, formatDate, formatNumber, i18nText } from '@/lib/format'
 import { WeatherNowCard } from '@/features/sky/WeatherNowCard'
 import { GlobeZoom, TAMIL_NADU_BBOX, type GlobeField } from '@/features/globe'
+import { PlanActionsMenu } from '@/features/plans/PlanActions'
 
 function greetingKey() {
   const h = new Date().getHours()
@@ -163,24 +164,27 @@ function CycleRow({ c }: { c: CycleDetail }) {
   const spread = differenceInCalendarDays(parseISO(c.harvest_window.latest), parseISO(c.harvest_window.earliest))
   const pct = Math.round((c.current?.stage_progress ?? 0) * 100)
   return (
-    <Link to={`/app/plans/${c.id}`} className="block rounded-xl border border-border p-4 transition hover:border-paddy-400">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-semibold">{i18nText(c.crop.name, i18n.language)} · <span className="text-muted-foreground">{c.land_name}</span></div>
-          <div className="text-xs text-muted-foreground">
-            {stage ? i18nText(stage.name, i18n.language) : t(`cycle.status.${c.status}`)}
-            {c.current && ` · ${t('timeline.das', { n: c.current.das })}`}
+    <div className="relative">
+      <Link to={`/app/plans/${c.id}`} className="block rounded-xl border border-border p-4 pr-12 transition hover:border-paddy-400">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-semibold">{i18nText(c.crop.name, i18n.language)} · <span className="text-muted-foreground">{c.land_name}</span></div>
+            <div className="text-xs text-muted-foreground">
+              {stage ? i18nText(stage.name, i18n.language) : t(`cycle.status.${c.status}`)}
+              {c.current && ` · ${t('timeline.das', { n: c.current.das })}`}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="font-display text-xl font-semibold tabular-nums">{daysLeft > 0 ? t('dashboard.daysToHarvest', { n: daysLeft }) : t('dashboard.harvestWindow')}</div>
+            <div className="text-[11px] text-muted-foreground">± {Math.ceil(spread / 2)} {t('common.days')} · <DataKindBadge kind="model_output" /></div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="font-display text-xl font-semibold tabular-nums">{daysLeft > 0 ? t('dashboard.daysToHarvest', { n: daysLeft }) : t('dashboard.harvestWindow')}</div>
-          <div className="text-[11px] text-muted-foreground">± {Math.ceil(spread / 2)} {t('common.days')} · <DataKindBadge kind="model_output" /></div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-full rounded-full bg-gradient-to-r from-paddy-400 via-paddy-500 to-sun-500" style={{ width: `${pct}%` }} />
         </div>
-      </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <div className="h-full rounded-full bg-gradient-to-r from-paddy-400 via-paddy-500 to-sun-500" style={{ width: `${pct}%` }} />
-      </div>
-    </Link>
+      </Link>
+      <PlanActionsMenu cycle={c} className="absolute right-2 top-2" />
+    </div>
   )
 }
 

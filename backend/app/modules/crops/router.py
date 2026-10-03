@@ -10,7 +10,7 @@ from app.core.audit import audit
 from app.core.deps import DB, CurrentUser
 from app.core.errors import AppError, not_found
 from app.core.ratelimit import RateLimit
-from app.modules.crops import service, variety_ai
+from app.modules.crops import ai_recs, service, variety_ai
 from app.modules.crops.models import CropVariety
 from app.modules.crops.schemas import VarietyCreate, VarietySuggestIn
 from app.modules.lands.service import get_owned_land
@@ -87,3 +87,12 @@ def recommendations(land_id: uuid.UUID, user: CurrentUser, db: DB, sowing_date: 
                     irrigation: Literal["assured", "limited", "rainfed"] = Query("limited")) -> list[dict]:
     land = get_owned_land(db, user, land_id)
     return service.recommendations(db, land, sowing_date or date.today(), irrigation)
+
+
+@router.get("/lands/{land_id}/recommendations/ai",
+            dependencies=[Depends(RateLimit("ai_recs", limit=10, window_s=60))])
+def ai_recommendations(land_id: uuid.UUID, user: CurrentUser, db: DB, sowing_date: date | None = Query(None),
+                       irrigation: Literal["assured", "limited", "rainfed"] = Query("limited")) -> dict:
+    land = get_owned_land(db, user, land_id)
+    return ai_recs.ai_recommendations(db, user, land, sowing_date or date.today(), irrigation,
+                                      ai_recs.get_recs_llm())
