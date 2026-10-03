@@ -65,13 +65,16 @@ uniform float uFadeStart;
 uniform float uFadeEnd;
 varying vec2 vXZ;
 varying vec2 vSkirt;
+varying vec2 vVar;
 ${GUST_GLSL}
 `;
 
 const VERTEX = /* glsl */ `
 vec3 transformed = vec3(position);
-transformed.y = mix(uCanopyH, aSkirt.y * uCanopyH, aSkirt.x);
+float hVar = aVar.y;
+transformed.y = mix(uCanopyH * hVar, aSkirt.y * uCanopyH * hVar, aSkirt.x);
 vSkirt = aSkirt;
+vVar = aVar;
 vXZ = (modelMatrix * vec4(transformed, 1.0)).xz;
 `;
 
@@ -107,6 +110,10 @@ float n2 = cNoise(vXZ * 0.06 + 17.0);
 float n3 = cNoise(vXZ * 3.1 + 5.0);
 vec3 leaf = mix(uBaseColor, uTipColor, 0.25 + 0.5 * n3);
 leaf *= 0.76 + 0.32 * n1 + 0.45 * (n2 - 0.5);
+// Per-plot variation: different sowing dates and fertility make neighbours differ in vigour and age.
+leaf *= 0.84 + 0.32 * vVar.x;
+leaf = mix(leaf, leaf * vec3(1.14, 1.05, 0.6), smoothstep(0.62, 1.0, vVar.x) * 0.55);
+leaf = mix(leaf, leaf * vec3(0.82, 1.06, 0.7), smoothstep(0.38, 0.0, vVar.x) * 0.5);
 // Looking into gaps between hills shows shaded lower leaves.
 leaf *= mix(0.72, 1.0, smoothstep(0.0, rad * 0.9, rad - length(off)) * (1.0 - far) + far);
 float sen = uSenescence * smoothstep(0.35, 0.9, n3 + 0.2 * n1);
@@ -165,7 +172,7 @@ export function createCanopyMaterial(wind: WindUniforms) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, wind, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec2 aSkirt;\n${DECL}`)
+      .replace('#include <common>', `#include <common>\nattribute vec2 aSkirt;\nattribute vec2 aVar;\n${DECL}`)
       .replace('#include <begin_vertex>', VERTEX);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${DECL}\n${NOISE_GLSL}`)
@@ -177,7 +184,7 @@ export function createCanopyMaterial(wind: WindUniforms) {
 }
 
 /** Canopy top over the polygon plus an outward-facing skirt along the edge. */
-export function createCanopyGeometry(shape: FieldShape): THREE.BufferGeometry {
+export function createCanopyGeometry(shape: FieldShape, tint = 0.5, heightVar = 1): THREE.BufferGeometry {
   const top = createFlatPolygon(shape);
   const topCount = top.getAttribute('position').count;
   const positions: number[] = Array.from(top.getAttribute('position').array as Float32Array);
@@ -208,6 +215,10 @@ export function createCanopyGeometry(shape: FieldShape): THREE.BufferGeometry {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geo.setAttribute('aSkirt', new THREE.Float32BufferAttribute(skirt, 2));
+  const vertexCount = positions.length / 3;
+  const variation = new Float32Array(vertexCount * 2);
+  for (let i = 0; i < vertexCount; i++) variation.set([tint, heightVar], i * 2);
+  geo.setAttribute('aVar', new THREE.BufferAttribute(variation, 2));
   geo.setIndex(index);
   geo.computeBoundingSphere();
   if (geo.boundingSphere) geo.boundingSphere.radius += 2;

@@ -347,7 +347,7 @@ export function Atmosphere({ sky, soundEnabled }: AtmosphereProps) {
       <directionalLight
         ref={keyLight}
         intensity={2}
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1536, 1536]}
         shadow-camera-left={-shadowR}
         shadow-camera-right={shadowR}
         shadow-camera-top={shadowR}

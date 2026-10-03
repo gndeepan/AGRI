@@ -133,6 +133,10 @@ export function Crop({ growth, windStrength, windDirection, wet, anthesis }: Cro
   useFrame((state, dt) => {
     const step = Math.min(dt, 0.1);
     const k = reducedMotion ? 1 : 1 - Math.exp(-6 * step);
+    // Seedlings and short tillers cast almost no visible shadow: skip re-drawing them into the
+    // shadow map (the near clumps alone are ~0.9 M triangles) until the canopy is worth shadowing.
+    meshes.blade0.mesh.castShadow = high && growth.heightM * growth.presence > 0.4;
+    meshes.panD.mesh.castShadow = high && growth.panicleEmergence > 0.15;
     wind.uTime.value = sceneTime(state.clock.elapsedTime, reducedMotion);
     wind.uWind.value = reducedMotion ? windStrength : damp(wind.uWind.value, windStrength, 1.5, step);
     wind.uWindDir.value.lerp(windDirection, reducedMotion ? 1 : 0.05).normalize();

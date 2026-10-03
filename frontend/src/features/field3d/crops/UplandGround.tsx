@@ -6,6 +6,7 @@ import type { FieldShape } from '../fieldShape';
 import { mulberry32 } from '../prng';
 import { useSceneSettings } from '../quality';
 import { createCanopyGeometry, createCanopyMaterial } from '../scene/canopyMaterial';
+import { createFarGroundMaterial } from '../scene/farGround';
 import { createFlatPolygon, useField } from '../scene/FieldContext';
 import { BundGrass, Bunds, buildBundGeometry, layoutPlots, plotShape } from '../scene/Ground';
 import { createSoilTexture } from '../scene/textures';
@@ -234,7 +235,9 @@ export function UplandGround({ spec, visual, wetness, irrigationMethod, patch, d
 function UplandSurroundings({ spec, visual, soilMaterial }: { spec: CropSpec; visual: CropVisual; soilMaterial: THREE.Material }) {
   const { shape, wind } = useField();
   const plots = useMemo(() => layoutPlots(shape), [shape]);
-  const worldR = Math.max(900, shape.radius * 10);
+  const worldR = Math.max(2600, shape.radius * 14);
+  const farMaterial = useMemo(() => createFarGroundMaterial('upland', shape.rowAngle, shape.center), [shape]);
+  useEffect(() => () => farMaterial.dispose(), [farMaterial]);
   const geos = useMemo(() => {
     const merge = (list: THREE.BufferGeometry[]) => {
       if (list.length === 0) return null;
@@ -247,8 +250,8 @@ function UplandSurroundings({ spec, visual, soilMaterial }: { spec: CropSpec; vi
     const same = cropped.filter((p) => p.variant === 'same');
     return {
       soil: merge(plots.map((p) => createFlatPolygon(plotShape(p.ring), 0.5))),
-      same: merge(same.map((p) => createCanopyGeometry(plotShape(p.ring)))),
-      younger: merge(younger.map((p) => createCanopyGeometry(plotShape(p.ring)))),
+      same: merge(same.map((p) => createCanopyGeometry(plotShape(p.ring), p.tint, p.heightVar))),
+      younger: merge(younger.map((p) => createCanopyGeometry(plotShape(p.ring), p.tint, p.heightVar))),
       bunds: merge(plots.map((p) => buildBundGeometry(plotShape(p.ring)))),
     };
   }, [plots]);
@@ -271,7 +274,7 @@ function UplandSurroundings({ spec, visual, soilMaterial }: { spec: CropSpec; vi
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[shape.center[0], -0.06, shape.center[1]]} receiveShadow>
         <circleGeometry args={[worldR, 64]} />
-        <meshStandardMaterial color="#7a6d45" roughness={1} />
+        <primitive object={farMaterial} attach="material" />
       </mesh>
       {geos.soil && <mesh geometry={geos.soil} material={soilMaterial} position-y={-0.01} receiveShadow />}
       {geos.same && <mesh geometry={geos.same} material={mats.same.material} />}

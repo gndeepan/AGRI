@@ -8,7 +8,9 @@ import type { GrowthParams } from '../growth';
 import { mulberry32 } from '../prng';
 import { useSceneSettings } from '../quality';
 import { createCanopyGeometry, createCanopyMaterial } from './canopyMaterial';
+import { createFarGroundMaterial } from './farGround';
 import { createFlatPolygon, useField } from './FieldContext';
+import { blocksPlot, planLandscape } from '../landscape';
 import { createBladeMaterials } from './plantMaterials';
 import { createClumpGeometry } from './riceGeometry';
 import { createMudTextures, createRippleNormal, createSoilTexture, type MudTextures } from './textures';
@@ -284,10 +286,19 @@ export function BundGrass() {
 export interface Plot {
   ring: Array<[number, number]>;
   variant: 'same' | 'younger' | 'flooded' | 'fallow' | 'stubble';
+  /** 0..1 per-plot colour variation (fresher ← 0.5 → older/yellower) so neighbours aren't clones. */
+  tint: number;
+  /** Per-plot canopy height factor (different sowing dates, different fertility). */
+  heightVar: number;
 }
 
-/** Neighbouring paddies laid out on the same orientation as the farmer's field. */
+/**
+ * Neighbouring paddies laid out on the same orientation as the farmer's field. A coarse grid
+ * fills the land; a finer second pass fills the ring the field's bounding box would otherwise
+ * leave bare. Plots never sit on the village, the road or the tank (see landscape.ts).
+ */
 export function layoutPlots(shape: FieldShape): Plot[] {
+  const plan = planLandscape(shape);
   const rand = mulberry32(17);
   const ux = Math.cos(shape.rowAngle);
   const uz = Math.sin(shape.rowAngle);
@@ -298,30 +309,60 @@ export function layoutPlots(shape: FieldShape): Plot[] {
   const nj = Math.min(6, Math.ceil(reach / cv));
   const variants: Plot['variant'][] = ['same', 'same', 'same', 'younger', 'younger', 'flooded', 'fallow', 'stubble'];
   const plots: Plot[] = [];
+  const taken = new Set<string>();
+
+  const tryPlot = (cx: number, cz: number, hu: number, hv: number): Plot | null => {
+    const corner = (a: number, b: number): [number, number] => [cx + a * ux - b * uz, cz + a * uz + b * ux];
+    if (blocksPlot(plan, cx, cz, Math.hypot(hu, hv))) return null;
+    for (let a = -2; a <= 2; a++) {
+      for (let b = -2; b <= 2; b++) {
+        const [px, pz] = corner((a / 2) * hu, (b / 2) * hv);
+        if (signedDistanceToEdge(shape, px, pz) < 2.5) return null;
+      }
+    }
+    // The farmer's field can be smaller than a plot: never cover any of its vertices.
+    for (const [fx, fz] of shape.ring) {
+      const du = (fx - cx) * ux + (fz - cz) * uz;
+      const dv = -(fx - cx) * uz + (fz - cz) * ux;
+      if (Math.abs(du) < hu + 2 && Math.abs(dv) < hv + 2) return null;
+    }
+    return {
+      ring: [corner(-hu, -hv), corner(hu, -hv), corner(hu, hv), corner(-hu, hv)],
+      variant: variants[Math.floor(rand() * variants.length)] ?? 'same',
+      tint: rand(),
+      heightVar: 0.82 + rand() * 0.34,
+    };
+  };
+
   for (let j = -nj; j <= nj; j++) {
     for (let i = -ni; i <= ni; i++) {
       const cx = shape.center[0] + i * cu * ux - j * cv * uz + (rand() - 0.5) * 3;
       const cz = shape.center[1] + i * cu * uz + j * cv * ux + (rand() - 0.5) * 3;
-      const hu = cu / 2 - 0.9;
-      const hv = cv / 2 - 0.9;
-      const corner = (a: number, b: number): [number, number] => [cx + a * ux - b * uz, cz + a * uz + b * ux];
-      const ring = [corner(-hu, -hv), corner(hu, -hv), corner(hu, hv), corner(-hu, hv)];
-      let clear = true;
-      for (let a = -2; a <= 2 && clear; a++) {
-        for (let b = -2; b <= 2 && clear; b++) {
-          const [px, pz] = corner((a / 2) * hu, (b / 2) * hv);
-          if (signedDistanceToEdge(shape, px, pz) < 2.5) clear = false;
-        }
+      const plot = tryPlot(cx, cz, cu / 2 - 0.9, cv / 2 - 0.9);
+      if (plot) {
+        plots.push(plot);
+        taken.add(`${i},${j}`);
       }
-      // The farmer's field can be smaller than a plot: never cover any of its vertices.
-      if (clear) {
-        for (const [fx, fz] of shape.ring) {
-          const du = (fx - cx) * ux + (fz - cz) * uz;
-          const dv = -(fx - cx) * uz + (fz - cz) * ux;
-          if (Math.abs(du) < hu + 2 && Math.abs(dv) < hv + 2) { clear = false; break; }
-        }
-      }
-      if (clear) plots.push({ ring, variant: variants[Math.floor(rand() * variants.length)] ?? 'same' });
+    }
+  }
+
+  // Fine infill hugging the field (and any other gap the coarse pass skipped).
+  const fu = Math.max(11, cu / 4);
+  const fv = Math.max(9, cv / 4);
+  const fine = shape.radius * 1.4 + 40;
+  const ki = Math.ceil(fine / fu);
+  const kj = Math.ceil(fine / fv);
+  for (let b = -kj; b <= kj; b++) {
+    for (let a = -ki; a <= ki; a++) {
+      const du = a * fu;
+      const dv = b * fv;
+      const ci = Math.round(du / cu);
+      const cj = Math.round(dv / cv);
+      if (taken.has(`${ci},${cj}`)) continue;
+      const cx = shape.center[0] + du * ux - dv * uz;
+      const cz = shape.center[1] + du * uz + dv * ux;
+      const plot = tryPlot(cx, cz, fu / 2 - 0.8, fv / 2 - 0.8);
+      if (plot) plots.push(plot);
     }
   }
   return plots;
@@ -336,7 +377,16 @@ export function plotShape(ring: Array<[number, number]>): FieldShape {
 function Surroundings({ mudMaterial, growth }: { mudMaterial: THREE.Material; growth: GrowthParams }) {
   const { shape, wind } = useField();
   const plots = useMemo(() => layoutPlots(shape), [shape]);
-  const worldR = Math.max(900, shape.radius * 10);
+  const worldR = Math.max(2600, shape.radius * 14);
+  // Neighbouring plots are ploughed earth, not the farmer's dark puddled mud.
+  const nearMud = useMemo(() => {
+    const m = (mudMaterial as THREE.MeshStandardMaterial).clone();
+    m.color.set('#85684a');
+    return m;
+  }, [mudMaterial]);
+  useEffect(() => () => nearMud.dispose(), [nearMud]);
+  const farMaterial = useMemo(() => createFarGroundMaterial('paddy', shape.rowAngle, shape.center), [shape]);
+  useEffect(() => () => farMaterial.dispose(), [farMaterial]);
 
   const geos = useMemo(() => {
     const by = (v: Plot['variant'][]) => plots.filter((p) => v.includes(p.variant));
@@ -348,9 +398,9 @@ function Surroundings({ mudMaterial, growth }: { mudMaterial: THREE.Material; gr
     };
     return {
       mud: merge(plots.map((p) => createFlatPolygon(plotShape(p.ring), 0.25))),
-      same: merge(by(['same']).map((p) => createCanopyGeometry(plotShape(p.ring)))),
-      younger: merge(by(['younger', 'flooded']).map((p) => createCanopyGeometry(plotShape(p.ring)))),
-      stubble: merge(by(['stubble']).map((p) => createCanopyGeometry(plotShape(p.ring)))),
+      same: merge(by(['same']).map((p) => createCanopyGeometry(plotShape(p.ring), p.tint, p.heightVar))),
+      younger: merge(by(['younger', 'flooded']).map((p) => createCanopyGeometry(plotShape(p.ring), p.tint, p.heightVar))),
+      stubble: merge(by(['stubble']).map((p) => createCanopyGeometry(plotShape(p.ring), p.tint, p.heightVar))),
       water: merge(by(['flooded', 'younger']).map((p) => createFlatPolygon(plotShape(p.ring)))),
       bunds: merge(plots.map((p) => buildBundGeometry(plotShape(p.ring)))),
     };
@@ -399,12 +449,12 @@ function Surroundings({ mudMaterial, growth }: { mudMaterial: THREE.Material; gr
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[shape.center[0], -0.06, shape.center[1]]} receiveShadow>
         <circleGeometry args={[worldR, 64]} />
-        <meshStandardMaterial color="#6f6a3e" roughness={1} />
+        <primitive object={farMaterial} attach="material" />
       </mesh>
-      {geos.mud && <mesh geometry={geos.mud} material={mudMaterial} position-y={-0.01} receiveShadow />}
+      {geos.mud && <mesh geometry={geos.mud} material={nearMud} position-y={-0.01} receiveShadow />}
       {geos.water && (
         <mesh geometry={geos.water} position-y={0.03}>
-          <meshStandardMaterial color="#6d7a6c" roughness={0.08} metalness={0.15} transparent opacity={0.7} depthWrite={false} />
+          <meshStandardMaterial color="#8da39c" roughness={0.12} metalness={0.05} transparent opacity={0.82} depthWrite={false} envMapIntensity={1.6} />
         </mesh>
       )}
       {geos.same && <mesh geometry={geos.same} material={mats.same.material} />}

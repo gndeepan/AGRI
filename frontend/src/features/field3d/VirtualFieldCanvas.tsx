@@ -1,5 +1,5 @@
 import { AdaptiveDpr, OrbitControls, PerformanceMonitor } from '@react-three/drei';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, DepthOfField, EffectComposer, N8AO, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
@@ -9,16 +9,17 @@ import { cropVisual, genericStageIndex } from './crops/cropGrowth';
 import { specFor } from './crops/specs';
 import { describeShape, fieldShapeFromPolygon, type FieldShape } from './fieldShape';
 import { growthParams } from './growth';
-import { detectQuality, SceneSettingsContext, usePrefersReducedMotion, type ResolvedQuality } from './quality';
+import { damp, detectQuality, SceneSettingsContext, usePrefersReducedMotion, type ResolvedQuality } from './quality';
 import { Atmosphere } from './scene/Atmosphere';
 import { Backdrop } from './scene/Backdrop';
+import { Landscape } from './scene/Landscape';
 import { FieldContext, type FieldContextValue } from './scene/FieldContext';
 import { Ground } from './scene/Ground';
 import { Fireflies, Rain, Splashes } from './scene/Particles';
 import { createWindUniforms } from './scene/plantMaterials';
 import { Crop } from './scene/RicePlants';
 import { bundSpot, ScaleFigures } from './scene/ScaleFigures';
-import { Wildlife } from './scene/Wildlife';
+import { LifeLayer } from './scene/LifeLayer';
 import { sceneLightingFromSky } from './sky';
 import { skyFromVisualState } from '@/features/sky/fromTimeline';
 import type { VirtualFieldProps } from './types';
@@ -107,9 +108,44 @@ function CameraRig({ framing }: { framing: Framing }) {
   return null;
 }
 
-function Effects({ quality, focusDistance }: { quality: ResolvedQuality; focusDistance: number }) {
+/** Post-processing detail: 'full' (AO + depth of field), 'lite' (depth of field only), 'low' (tone map only). */
+export type FxLevel = 'full' | 'lite' | 'low';
+
+interface DofHandle {
+  circleOfConfusionMaterial: { focusDistance: number; focusRange: number };
+  bokehScale: number;
+}
+
+/**
+ * Depth of field that follows the camera: the focus plane sits where the viewer is looking
+ * (orbit: the orbit target; bund view: the crop a few metres ahead), eased so it pulls rather than
+ * snaps. The farmer's field stays sharp while the distant village, trees and horizon blur.
+ */
+function FocusedDepthOfField({ shape, mode }: { shape: FieldShape; mode: ViewMode }) {
+  const ref = useRef<DofHandle | null>(null);
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3 } | null;
+  const focus = useRef(0);
+  // A generous in-focus zone: only the far village, groves and horizon go soft.
+  const sharp = Math.max(45, shape.radius * 1.6);
+  useFrame((_, dt) => {
+    const dof = ref.current;
+    if (!dof) return;
+    const want = mode === 'eye'
+      ? 7
+      : controls ? Math.min(shape.radius * 2.5, Math.max(6, camera.position.distanceTo(controls.target))) : 20;
+    focus.current = focus.current === 0 ? want : damp(focus.current, want, 3.5, Math.min(dt, 0.1));
+    const m = dof.circleOfConfusionMaterial;
+    m.focusDistance = focus.current;
+    // Everything within the field's own extent stays in focus; blur grows beyond it.
+    m.focusRange = mode === 'eye' ? 34 : sharp;
+  });
+  return <DepthOfField ref={ref as never} focusDistance={20} focusRange={sharp} bokehScale={mode === 'eye' ? 1.7 : 1.4} resolutionScale={0.5} />;
+}
+
+function Effects({ fx, shape, mode, depthOfField }: { fx: FxLevel; shape: FieldShape; mode: ViewMode; depthOfField: boolean }) {
   // ACES keeps the saturated greens of a paddy; AgX greyed them out.
-  if (quality === 'low') {
+  if (fx === 'low') {
     return (
       <EffectComposer multisampling={0}>
         <Bloom intensity={0.25} luminanceThreshold={0.9} mipmapBlur />
@@ -120,9 +156,8 @@ function Effects({ quality, focusDistance }: { quality: ResolvedQuality; focusDi
   }
   return (
     <EffectComposer multisampling={0} enableNormalPass={false}>
-      <N8AO aoRadius={0.6} distanceFalloff={0.6} intensity={2.2} quality="medium" halfRes />
-      {/* Only the far distance softens; the crop in front of the viewer stays sharp. */}
-      <DepthOfField worldFocusDistance={focusDistance} worldFocusRange={focusDistance * 3} bokehScale={1.4} />
+      {fx === 'full' ? <N8AO aoRadius={0.6} distanceFalloff={0.6} intensity={2.2} quality="low" halfRes /> : <></>}
+      {depthOfField ? <FocusedDepthOfField shape={shape} mode={mode} /> : <></>}
       <Bloom intensity={0.35} luminanceThreshold={0.85} luminanceSmoothing={0.2} mipmapBlur />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       <Vignette offset={0.28} darkness={0.5} />
@@ -184,9 +219,14 @@ export default function VirtualFieldCanvas({
   useAmbientSound(soundEnabled, { daylight: lighting.daylight, night: lighting.night, rain, wind: windStrength });
 
   const settings = useMemo(() => ({ quality: resolved, reducedMotion }), [resolved, reducedMotion]);
-  const focusDistance = Math.max(8, Math.hypot(
-    framing.camera[0] - framing.target[0], framing.camera[1] - framing.target[1], framing.camera[2] - framing.target[2],
-  ));
+  // Staged fallback when the frame rate drops: drop AO first, then depth of field, then go low.
+  const [fxStep, setFxStep] = useState(0);
+  // Dev-only profiling override: ?fx=full|lite|low|nodof (never read in production builds).
+  const devFx = import.meta.env.DEV ? new URLSearchParams(location.search).get('fx') : null;
+  const fx: FxLevel = devFx === 'full' || devFx === 'lite' || devFx === 'low' ? devFx
+    : devFx === 'nodof' ? 'full'
+    : resolved === 'low' ? 'low' : fxStep === 0 ? 'full' : fxStep === 1 ? 'lite' : 'low';
+  const depthOfField = devFx === 'nodof' ? false : resolved === 'high' && !reducedMotion && (devFx ? fx !== 'low' : fxStep < 2);
 
   return (
     <div ref={container} className={className} style={{ position: 'relative', width: '100%', height: '100%', touchAction: 'pan-y' }}>
@@ -197,9 +237,10 @@ export default function VirtualFieldCanvas({
           frameloop={visible ? 'always' : 'never'}
           camera={{ position: framing.camera, fov: mode === 'eye' ? 62 : 42, near: 0.05, far: 5000 }}
           gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false }}
-          onCreated={({ gl }) => {
+          onCreated={({ gl, scene }) => {
             // Tone mapping happens in the post-processing chain (AgX).
             gl.toneMapping = THREE.NoToneMapping;
+            if (import.meta.env.DEV) Object.assign(window, { __bhoomiGl: gl, __bhoomiScene: scene });
             gl.domElement.addEventListener('webglcontextlost', (e) => {
               e.preventDefault();
               announceWebGLFailure('context_lost');
@@ -209,7 +250,16 @@ export default function VirtualFieldCanvas({
         >
           <SceneSettingsContext.Provider value={settings}>
             <FieldContext.Provider value={field}>
-              <PerformanceMonitor onDecline={() => quality === 'auto' && setAutoQuality('low')} flipflops={2}>
+              <PerformanceMonitor
+                onDecline={() => {
+                  if (quality !== 'auto') return;
+                  setFxStep((n) => {
+                    if (n >= 2) { setAutoQuality('low'); return n; }
+                    return n + 1;
+                  });
+                }}
+                flipflops={3}
+              >
                 <AdaptiveDpr pixelated={false} />
               </PerformanceMonitor>
               <Atmosphere sky={sky} soundEnabled={soundEnabled} />
@@ -234,19 +284,19 @@ export default function VirtualFieldCanvas({
               )}
               <ScaleFigures viewFrom={framing.viewFrom} />
               <Backdrop />
+              <Landscape />
               <Rain intensity={rain} windDirection={windDirection} windSpeedKmh={windKmh} />
               {!upland && <Splashes intensity={rain} />}
               <Fireflies visibility={fireflies} />
-              {upland && uplandVisual ? (
-                <Wildlife
-                  activity={wildlife}
-                  canopyHeight={upland.heightM * uplandVisual.scale * uplandVisual.presence}
-                  wading={false}
-                  butterflies={flowering}
-                />
-              ) : (
-                <Wildlife activity={wildlife} canopyHeight={growth.heightM * growth.presence} wading={state.standingWater || growth.soilWetness > 0.8} />
-              )}
+              <LifeLayer
+                activity={wildlife}
+                canopyHeight={upland && uplandVisual ? upland.heightM * uplandVisual.scale * uplandVisual.presence : growth.heightM * growth.presence}
+                wading={!upland && (state.standingWater || growth.soilWetness > 0.8)}
+                flowers={flowering}
+                ripeness={state.stageKey === 'maturity' ? 1 : state.stageKey === 'grain_filling' ? state.stageProgress * 0.6 : 0}
+                crop={upland ? 'upland' : 'paddy'}
+                viewFrom={framing.viewFrom}
+              />
               <OrbitControls
                 makeDefault
                 enablePan={mode === 'orbit'}
@@ -263,7 +313,7 @@ export default function VirtualFieldCanvas({
                 zoomSpeed={0.8}
               />
               <CameraRig framing={framing} />
-              <Effects quality={resolved} focusDistance={focusDistance} />
+              <Effects fx={fx} shape={shape} mode={mode} depthOfField={depthOfField} />
             </FieldContext.Provider>
           </SceneSettingsContext.Provider>
         </Canvas>

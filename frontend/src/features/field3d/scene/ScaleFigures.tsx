@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { useSceneSettings } from '../quality';
 import { useField } from './FieldContext';
 import { BUND_H } from './Ground';
 
@@ -74,6 +75,8 @@ export function bundSpot(ring: Array<[number, number]>, near: [number, number]) 
 
 export function ScaleFigures({ viewFrom }: { viewFrom: [number, number] }) {
   const { shape } = useField();
+  // The animated farmer (wildlife/Farmer) replaces this static one on the high tier.
+  const { quality } = useSceneSettings();
   const geos = useMemo(() => ({ farmer: farmerGeometry(), scarecrow: scarecrowGeometry() }), []);
   const mat = useMemo(() => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), []);
   useEffect(() => () => { geos.farmer.dispose(); geos.scarecrow.dispose(); mat.dispose(); }, [geos, mat]);
@@ -94,7 +97,7 @@ export function ScaleFigures({ viewFrom }: { viewFrom: [number, number] }) {
 
   return (
     <group>
-      <mesh geometry={geos.farmer} material={mat} position={spots.farmer} rotation-y={spots.farmerYaw} castShadow />
+      {quality === 'low' && <mesh geometry={geos.farmer} material={mat} position={spots.farmer} rotation-y={spots.farmerYaw} castShadow />}
       <mesh geometry={geos.scarecrow} material={mat} position={spots.scarecrow} rotation-y={spots.farmerYaw + 0.4} castShadow />
     </group>
   );

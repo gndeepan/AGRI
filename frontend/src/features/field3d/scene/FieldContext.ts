@@ -19,7 +19,7 @@ export interface LodConfig {
 
 export function lodFor(quality: ResolvedQuality): LodConfig {
   return quality === 'high'
-    ? { r0: 6, r1: 17, panicleR: 3.5, budget0: 4200, budget1: 36000 }
+    ? { r0: 5.2, r1: 16, panicleR: 3.2, budget0: 3200, budget1: 26000 }
     : { r0: 3, r1: 8.5, panicleR: 0, budget0: 1100, budget1: 8000 };
 }
 

@@ -24,6 +24,8 @@ import { cyclesApi } from '@/api/endpoints'
 import { qk, useCycle, useLand, useTimeline, useUpdateTask, useWeather } from '@/api/queries'
 import type { CycleDetail, TimelineDay } from '@/api/types'
 import { VirtualField, detectWebGL } from '@/features/field3d'
+import { PlanActionsMenu } from '@/features/plans/PlanActions'
+import { NativeSelect } from '@/components/ui/native-select'
 import { WEBGL_FAILED_EVENT } from '@/features/field3d/WebGLBoundary'
 import type { FieldVisualState } from '@/features/field3d/types'
 import { Field2D } from '@/features/timeline/Field2D'
@@ -128,7 +130,10 @@ export default function FieldExperience() {
             )}
             {tl && <SceneReadout timeline={tl} stageName={stageName} />}
           </div>
-          <SceneControls />
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            <SceneControls />
+            {c && <PlanActionsMenu cycle={c} afterDeletePath="/app/plans" variant="glass" />}
+          </div>
         </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-3">
           <p className="glass pointer-events-auto flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11px] font-medium sm:text-xs">
@@ -253,14 +258,15 @@ function SceneControls() {
   const { soundEnabled, setSoundEnabled, sceneQuality, setSceneQuality } = useUi()
   return (
     <div className="pointer-events-auto flex items-center gap-1.5">
-      <select
+      <NativeSelect
+        variant="glass"
+        size="xs"
         value={sceneQuality}
         onChange={(e) => setSceneQuality(e.target.value as 'auto' | 'low' | 'high')}
         aria-label={t('field.quality')}
-        className="glass h-9 rounded-full px-3 text-xs font-medium outline-none"
       >
         {(['auto', 'low', 'high'] as const).map((q) => <option key={q} value={q}>{t(`field.qualities.${q}`)}</option>)}
-      </select>
+      </NativeSelect>
       <Button size="icon-sm" variant="outline" className="glass" onClick={() => setSoundEnabled(!soundEnabled)} aria-pressed={soundEnabled} aria-label={soundEnabled ? t('field.soundOff') : t('field.soundOn')}>
         {soundEnabled ? <Volume2 /> : <VolumeX />}
       </Button>

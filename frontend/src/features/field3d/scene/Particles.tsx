@@ -34,7 +34,9 @@ export function Rain({ intensity, windDirection, windSpeedKmh }: { intensity: nu
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, RAIN_HEIGHT / 2, 0), RAIN_SPREAD);
     const mat = new THREE.ShaderMaterial({
       transparent: true,
-      depthWrite: false,
+      // Streaks write their own depth (transparent pixels are discarded) so depth of field focuses
+      // on the drop, not on the far background behind it — otherwise rain gets blurred away.
+      depthWrite: true,
       uniforms: {
         uTime: { value: 0 },
         uSlant: { value: new THREE.Vector2() },
@@ -65,7 +67,11 @@ export function Rain({ intensity, windDirection, windSpeedKmh }: { intensity: nu
         varying float vEnd;
         varying float vFade;
         // Brighter head, fading tail: reads as a motion-blurred drop.
-        void main() { gl_FragColor = vec4(0.8, 0.85, 0.92, vFade * uOpacity * (0.25 + 0.75 * (1.0 - vEnd))); }`,
+        void main() {
+          float a = vFade * uOpacity * (0.25 + 0.75 * (1.0 - vEnd));
+          if (a < 0.02) discard;
+          gl_FragColor = vec4(0.8, 0.85, 0.92, a);
+        }`,
     });
     return { geometry: geo, material: mat };
   }, [maxDrops]);

@@ -14,7 +14,7 @@ import { applyCanopy } from './UplandGround';
 
 /** Vertex budgets per tier: detailed plants near the camera, simpler ones further out. */
 const BUDGET: Record<ResolvedQuality, { near: number; mid: number; maxNear: number; maxMid: number }> = {
-  high: { near: 3_000_000, mid: 3_500_000, maxNear: 6000, maxMid: 30000 },
+  high: { near: 2_400_000, mid: 3_000_000, maxNear: 5000, maxMid: 26000 },
   low: { near: 600_000, mid: 800_000, maxNear: 1400, maxMid: 8000 },
 };
 

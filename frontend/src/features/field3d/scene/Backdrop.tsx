@@ -1,12 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { signedDistanceToEdge } from '../fieldShape';
 import { mulberry32 } from '../prng';
-import { useSceneSettings } from '../quality';
 import { useField } from './FieldContext';
 
-function colorize(geo: THREE.BufferGeometry, color: THREE.Color, jitter = 0, seed = 1): THREE.BufferGeometry {
+export function colorize(geo: THREE.BufferGeometry, color: THREE.Color, jitter = 0, seed = 1): THREE.BufferGeometry {
   const g = geo.index ? geo.toNonIndexed() : geo;
   const count = g.attributes.position?.count ?? 0;
   const colors = new Float32Array(count * 3);
@@ -21,7 +19,7 @@ function colorize(geo: THREE.BufferGeometry, color: THREE.Color, jitter = 0, see
 }
 
 /** Coconut palm: ringed curved trunk, a crown of pinnate fronds with drooping leaflets, a nut cluster. */
-function createPalmGeometry(detail: 'high' | 'low', seed: number): THREE.BufferGeometry {
+export function createPalmGeometry(detail: 'high' | 'low', seed: number): THREE.BufferGeometry {
   const rand = mulberry32(seed);
   const parts: THREE.BufferGeometry[] = [];
   const lean = 0.6 + rand() * 1.4;
@@ -86,7 +84,7 @@ function createPalmGeometry(detail: 'high' | 'low', seed: number): THREE.BufferG
 }
 
 /** Broadleaf tree (neem / tamarind silhouette): trunk + clustered canopy blobs. */
-function createTreeGeometry(seed: number): THREE.BufferGeometry {
+export function createTreeGeometry(seed: number): THREE.BufferGeometry {
   const rand = mulberry32(seed);
   const parts: THREE.BufferGeometry[] = [];
   const h = 4 + rand() * 3;
@@ -104,54 +102,86 @@ function createTreeGeometry(seed: number): THREE.BufferGeometry {
   return merged ?? new THREE.BufferGeometry();
 }
 
-export function Backdrop() {
-  const { quality } = useSceneSettings();
-  const { shape } = useField();
-  const high = quality === 'high';
-
-  const instanced = useMemo(() => {
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
-    const rand = mulberry32(31);
-    const ring = shape.radius + 25;
-    const palmVariants = [0, 1, 2].map((v) => createPalmGeometry(high ? 'high' : 'low', 100 + v));
-    const treeGeo = createTreeGeometry(7);
-    const perVariant = high ? 24 : 12;
-    const meshes: THREE.InstancedMesh[] = [];
-    const m = new THREE.Matrix4();
-    const sv = new THREE.Vector3();
-    const place = (mesh: THREE.InstancedMesh, count: number, minD: number, maxD: number, scale: [number, number]) => {
-      let n = 0;
-      for (let tries = 0; n < count && tries < count * 20; tries++) {
-        // Palms cluster in groves along field edges and around homesteads.
-        const grove = Math.floor(rand() * 9);
-        const ga = (grove / 9) * Math.PI * 2 + 0.4;
-        const a = ga + (rand() - 0.5) * 0.5;
-        const d = minD + rand() * (maxD - minD);
-        const x = shape.center[0] + Math.cos(a) * d;
-        const z = shape.center[1] + Math.sin(a) * d;
-        if (signedDistanceToEdge(shape, x, z) < 6) continue;
-        const s = scale[0] + rand() * (scale[1] - scale[0]);
-        m.makeRotationY(rand() * Math.PI * 2).scale(sv.set(s, s * (0.9 + rand() * 0.25), s)).setPosition(x, 0, z);
-        mesh.setMatrixAt(n++, m);
-      }
-      mesh.count = n;
-    };
-    for (const g of palmVariants) {
-      const mesh = new THREE.InstancedMesh(g, mat, perVariant);
-      place(mesh, perVariant, ring, ring + 140, [0.85, 1.25]);
-      mesh.castShadow = false;
-      meshes.push(mesh);
+/** Palmyra palm: tall straight trunk with a slight swelling and a dense fan-leaf crown. */
+export function createPalmyraGeometry(seed: number): THREE.BufferGeometry {
+  const rand = mulberry32(seed);
+  const parts: THREE.BufferGeometry[] = [];
+  const h = 9 + rand() * 3.5;
+  const pts = [0, 0.3, 0.65, 1].map((t) => new THREE.Vector3((rand() - 0.5) * 0.3 * t, h * t, 0));
+  const trunk = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 14, 0.19, 7, false);
+  parts.push(colorize(trunk, new THREE.Color('#7d6f5d'), 0.3, seed));
+  const top = pts[3]!;
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * Math.PI * 2 + rand() * 0.2;
+    const lift = 0.35 + rand() * 0.55;
+    const len = 3 + rand() * 1.1;
+    const dir = new THREE.Vector3(Math.cos(a), lift, Math.sin(a)).normalize();
+    const side = new THREE.Vector3(-dir.z, 0, dir.x).normalize().multiplyScalar(1.5);
+    const tip = top.clone().addScaledVector(dir, len);
+    tip.y -= 0.55 * len * (1 - lift);
+    const mid = top.clone().addScaledVector(dir, len * 0.55);
+    const f = new THREE.BufferGeometry();
+    f.setAttribute('position', new THREE.Float32BufferAttribute([
+      top.x, top.y, top.z, mid.x + side.x, mid.y, mid.z + side.z, tip.x, tip.y, tip.z,
+      top.x, top.y, top.z, tip.x, tip.y, tip.z, mid.x - side.x, mid.y, mid.z - side.z,
+    ], 3));
+    // Fan leaves face up so the crown stays lit when seen from below.
+    f.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+    const leafColor = new THREE.Color().setHSL(0.24 + rand() * 0.03, 0.42, 0.26 + rand() * 0.07);
+    parts.push(colorize(f, leafColor, 0.3, seed + 10 + i));
+    // The same leaf with reversed winding and a hair lower: from below the lit (up-normal) face
+    // is the one that faces the viewer, so the crown doesn't go black against the sky.
+    const under = f.clone();
+    const up = under.getAttribute('position');
+    for (let v = 0; v < up.count; v += 3) {
+      const ax = up.getX(v + 1); const ay = up.getY(v + 1); const az = up.getZ(v + 1);
+      up.setXYZ(v + 1, up.getX(v + 2), up.getY(v + 2), up.getZ(v + 2));
+      up.setXYZ(v + 2, ax, ay, az);
     }
-    const trees = new THREE.InstancedMesh(treeGeo, mat, high ? 40 : 18);
-    place(trees, high ? 40 : 18, ring + 60, ring + 320, [1, 1.8]);
-    meshes.push(trees);
-    return { meshes, mat };
-  }, [shape, high]);
+    under.translate(0, -0.03, 0);
+    parts.push(colorize(under, leafColor, 0.3, seed + 60 + i));
+  }
+  const fruit = new THREE.SphereGeometry(0.22, 6, 5);
+  fruit.translate(top.x + 0.2, top.y - 0.5, top.z);
+  parts.push(colorize(fruit, new THREE.Color('#3b2b24'), 0.2, seed + 99));
+  const merged = mergeGeometries(parts.map((p) => { if (!p.getAttribute('normal')) p.computeVertexNormals(); return p; }), false);
+  parts.forEach((p) => p.dispose());
+  return merged ?? new THREE.BufferGeometry();
+}
 
-  useEffect(() => () => {
-    instanced.meshes.forEach((m) => m.geometry.dispose());
-    instanced.mat.dispose();
-  }, [instanced]);
+/** Banyan: several stout trunks, a very wide dark canopy and hanging aerial roots. */
+export function createBanyanGeometry(seed: number): THREE.BufferGeometry {
+  const rand = mulberry32(seed);
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const t = new THREE.CylinderGeometry(0.35, 0.6, 6, 6);
+    t.translate(Math.cos(a) * 1.4, 3, Math.sin(a) * 1.4);
+    parts.push(colorize(t, new THREE.Color('#5f5446'), 0.25, seed + i));
+  }
+  for (let i = 0; i < 11; i++) {
+    const blob = new THREE.IcosahedronGeometry(3 + rand() * 2.4, 1);
+    const a = rand() * Math.PI * 2;
+    const d = rand() * 7;
+    blob.scale(1, 0.62, 1);
+    blob.translate(Math.cos(a) * d, 7 + rand() * 2.5, Math.sin(a) * d);
+    parts.push(colorize(blob, new THREE.Color().setHSL(0.27, 0.4, 0.15 + rand() * 0.05), 0.3, seed + 20 + i));
+  }
+  for (let i = 0; i < 9; i++) {
+    const a = rand() * Math.PI * 2;
+    const d = 2 + rand() * 6;
+    const root = new THREE.CylinderGeometry(0.04, 0.05, 6.5, 4);
+    root.translate(Math.cos(a) * d, 3.5, Math.sin(a) * d);
+    parts.push(colorize(root, new THREE.Color('#6b5a45'), 0.2, seed + 40 + i));
+  }
+  const merged = mergeGeometries(parts.map((p) => { if (!p.getAttribute('normal')) p.computeVertexNormals(); return p; }), false);
+  parts.forEach((p) => p.dispose());
+  return merged ?? new THREE.BufferGeometry();
+}
+
+/** Distant low ridge on the horizon; trees, village and landmarks live in Landscape.tsx. */
+export function Backdrop() {
+  const { shape } = useField();
 
   const hills = useMemo(() => {
     const rand = mulberry32(8);
@@ -171,7 +201,6 @@ export function Backdrop() {
 
   return (
     <group>
-      {instanced.meshes.map((m, i) => <primitive key={i} object={m} />)}
       {hills.map((h, i) => (
         <mesh key={i} position={[h.x, -4, h.z]} scale={[h.r, h.h, h.r * 0.6]}>
           <sphereGeometry args={[1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
