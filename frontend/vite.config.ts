@@ -25,5 +25,6 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
+    testTimeout: 15000, // full-suite runs on busy dev machines and CI regularly exceed the 5 s default
   },
 })

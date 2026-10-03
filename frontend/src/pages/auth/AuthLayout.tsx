@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { SeasonScene } from '@/components/auth/SeasonScene'
+import { AuthScene } from '@/components/auth/AuthScene'
 import { Logo } from '@/components/layout/Logo'
 import { LanguageToggle } from '@/components/common/LanguageToggle'
 
@@ -7,7 +7,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
       <div className="relative hidden overflow-hidden lg:block">
-        <SeasonScene className="absolute inset-0" />
+        <AuthScene className="absolute inset-0" />
         <div className="absolute left-10 top-10">
           <Logo light />
         </div>

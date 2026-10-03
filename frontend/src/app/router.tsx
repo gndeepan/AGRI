@@ -28,6 +28,8 @@ const Admin = lazy(() => import('@/pages/Admin'))
 // Dev-only preview of every sky state; the import is dropped from production builds.
 const SkyGallery = import.meta.env.DEV ? lazy(() => import('@/features/sky/SkyGallery')) : null
 
+const LoginScenePreview = import.meta.env.DEV ? lazy(() => import('@/components/auth/login3d/Preview')) : null
+
 const s = (el: ReactNode) => <Suspense fallback={<PageSpinner />}>{el}</Suspense>
 
 export const router = createBrowserRouter([
@@ -71,5 +73,6 @@ export const router = createBrowserRouter([
     ],
   },
   ...(SkyGallery ? [{ path: '/dev/sky', element: s(<SkyGallery />) }] : []),
+  ...(LoginScenePreview ? [{ path: '/dev/login-scene', element: s(<LoginScenePreview />) }] : []),
   { path: '*', element: <Navigate to="/" replace /> },
 ])

@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import {
+  CROP, DAYS_PER_CYCLE, STAGES, clamp01, hex, lerp, mulberry32, sample, seamAt, seasonAt, stageIndex, type RGB,
+} from './season'
 
 /**
  * Looping, illustrative paddy season for the auth screens: one Kuruvai cycle (transplanting →
@@ -8,32 +11,7 @@ import { useTranslation } from 'react-i18next'
  * rAF loop writes colours/positions to the root element, so React renders the scene once.
  */
 
-const CYCLE_MS = 36000
-const DAYS_PER_CYCLE = 4
-const STAGES = [
-  { key: 'transplanting', day: 1 },
-  { key: 'tillering', day: 30 },
-  { key: 'flowering', day: 75 },
-  { key: 'harvest', day: 115 },
-] as const
-
-type RGB = [number, number, number]
-const hex = (h: string): RGB => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as RGB
 const mix = (a: RGB, b: RGB, f: number) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * f)).join(',')})`
-const lerp = (a: number, b: number, f: number) => a + (b - a) * f
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
-const smooth = (f: number) => f * f * (3 - 2 * f)
-
-/** Piecewise-smooth interpolation over keyframes sorted by `at`. */
-function sample<T extends { at: number }>(keys: T[], t: number, pick: (a: T, b: T, f: number) => void) {
-  for (let i = 0; i < keys.length - 1; i++) {
-    const a = keys[i]
-    const b = keys[i + 1]
-    if (t >= a.at && t <= b.at) return pick(a, b, smooth((t - a.at) / (b.at - a.at || 1)))
-  }
-  const last = keys[keys.length - 1]
-  pick(last, last, 0)
-}
 
 const SKY = [
   { at: 0.0, top: '#0b1630', bottom: '#24365a', dark: 0.55, warm: 0 },
@@ -45,26 +23,6 @@ const SKY = [
   { at: 0.82, top: '#0b1630', bottom: '#1d2b4a', dark: 0.55, warm: 0 },
   { at: 1.0, top: '#0b1630', bottom: '#24365a', dark: 0.55, warm: 0 },
 ].map((k) => ({ ...k, topC: hex(k.top), bottomC: hex(k.bottom) }))
-
-const CROP = [
-  { at: 0.0, grow: 0.3, leaf: '#9ccb62', grain: '#dfe6a0', panicle: 0, water: 0.9 },
-  { at: 0.25, grow: 0.66, leaf: '#4f9a3c', grain: '#dfe6a0', panicle: 0, water: 0.8 },
-  { at: 0.5, grow: 0.95, leaf: '#3c7c31', grain: '#e3e9b0', panicle: 0.65, water: 0.6 },
-  { at: 0.72, grow: 1, leaf: '#6d8f39', grain: '#d8c25e', panicle: 1, water: 0.28 },
-  { at: 0.9, grow: 1, leaf: '#b39a46', grain: '#e5b548', panicle: 1, water: 0.04 },
-  { at: 1.0, grow: 1, leaf: '#b39a46', grain: '#e5b548', panicle: 1, water: 0.04 },
-].map((k) => ({ ...k, leafC: hex(k.leaf), grainC: hex(k.grain) }))
-
-/** Deterministic PRNG so the field layout is identical on every render. */
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0
-    seed = (seed + 0x6d2b79f5) | 0
-    let r = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 const HORIZON = 600
 interface Clump { x: number; y: number; s: number; delay: number; blades: number[]; tilt: number }
@@ -124,8 +82,13 @@ function palm(x: number, y: number, h: number, lean: number, key: number) {
   )
 }
 
-/** `fixedSeason` (0..1) freezes the loop at one moment — for previews and tests. */
-export function SeasonScene({ className, fixedSeason }: { className?: string; fixedSeason?: number }) {
+/**
+ * `fixedSeason` (0..1) freezes the loop at one moment — for previews and tests.
+ * `backdrop` is layered over the SVG and under the captions (used by the 3D scene).
+ */
+export function SeasonScene({
+  className, fixedSeason, backdrop, svgHidden,
+}: { className?: string; fixedSeason?: number; backdrop?: ReactNode; svgHidden?: boolean }) {
   const { t } = useTranslation()
   const reduce = useReducedMotion()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -140,7 +103,6 @@ export function SeasonScene({ className, fixedSeason }: { className?: string; fi
     if (!root) return
     let raf = 0
     let lastStage = -1
-    const start = performance.now()
 
     const paint = (season: number) => {
       const day = (season * DAYS_PER_CYCLE) % 1
@@ -161,8 +123,7 @@ export function SeasonScene({ className, fixedSeason }: { className?: string; fi
         set('--ss-water', lerp(a.water, b.water, f).toFixed(3))
       })
       // Harvest → re-transplant: fade the crop out and back in around the loop seam.
-      const seam = season > 0.95 ? 1 - (season - 0.95) / 0.05 : season < 0.03 ? season / 0.03 : 1
-      set('--ss-crop', smooth(clamp01(seam)).toFixed(3))
+      set('--ss-crop', seamAt(season).toFixed(3))
 
       const p = (day - 0.06) / 0.68
       const sun = sunRef.current
@@ -179,7 +140,7 @@ export function SeasonScene({ className, fixedSeason }: { className?: string; fi
       }
       if (barRef.current) barRef.current.style.transform = `scaleX(${season})`
 
-      const s = Math.min(STAGES.length - 1, Math.floor(season * STAGES.length))
+      const s = stageIndex(season)
       if (s !== lastStage) {
         lastStage = s
         setStage(s)
@@ -191,7 +152,7 @@ export function SeasonScene({ className, fixedSeason }: { className?: string; fi
       return
     }
     const tick = (now: number) => {
-      paint(((now - start) % CYCLE_MS) / CYCLE_MS)
+      paint(seasonAt(now))
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -202,7 +163,7 @@ export function SeasonScene({ className, fixedSeason }: { className?: string; fi
 
   return (
     <div ref={rootRef} className={`season-scene ${reduce || fixedSeason !== undefined ? 'ss-still' : ''} ${className ?? ''}`} aria-hidden>
-      <svg viewBox="0 0 800 1000" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 h-full w-full">
+      <svg viewBox="0 0 800 1000" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 h-full w-full" style={svgHidden ? { display: 'none' } : undefined}>
         <defs>
           <linearGradient id="ss-sky" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" style={{ stopColor: 'var(--ss-sky-top)' }} />
@@ -316,6 +277,7 @@ export function SeasonScene({ className, fixedSeason }: { className?: string; fi
         </g>
         <rect width="800" height="1000" fill="url(#ss-vignette)" />
       </svg>
+      {backdrop}
 
       <div className="absolute inset-x-10 bottom-10 text-soil-50">
         <p className="font-display text-3xl leading-tight font-semibold drop-shadow-sm xl:text-4xl">{t('auth.scene.tagline')}</p>
