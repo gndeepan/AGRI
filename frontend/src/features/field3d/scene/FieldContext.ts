@@ -15,12 +15,17 @@ export interface LodConfig {
   panicleR: number;
   budget0: number;
   budget1: number;
+  /**
+   * Far tier: very light clumps (24 vertices) and single panicles out from the detailed rings, so most
+   * of a typical field is real plants rather than the canopy surface. Centred on its own, coarser focus.
+   */
+  budget2: number;
 }
 
 export function lodFor(quality: ResolvedQuality): LodConfig {
   return quality === 'high'
-    ? { r0: 5.2, r1: 16, panicleR: 3.2, budget0: 3200, budget1: 26000 }
-    : { r0: 3, r1: 8.5, panicleR: 0, budget0: 1100, budget1: 8000 };
+    ? { r0: 5.2, r1: 16, panicleR: 3.2, budget0: 3200, budget1: 26000, budget2: 60000 }
+    : { r0: 3, r1: 8.5, panicleR: 0, budget0: 1100, budget1: 8000, budget2: 30000 };
 }
 
 export interface FieldContextValue {

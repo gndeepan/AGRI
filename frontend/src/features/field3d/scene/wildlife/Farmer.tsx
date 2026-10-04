@@ -5,86 +5,32 @@ import { hash01 } from '../../prng';
 import { sceneTime, useSceneSettings } from '../../quality';
 import { useField } from '../FieldContext';
 import { BUND_H } from '../Ground';
-import { at, buildColored, ellipsoid, limb, shadeY } from './geo';
+import { at, buildColored } from './geo';
+import { farmerGeometry, type FarmerLook } from './farmerBody';
+import { createOrganicMaterial } from './organicMaterial';
 import { buildPathRing, farmerPoseAt, nearestArc, planFarmer } from './farmerPath';
 
-const SKIN = '#5b3a27';
-const SKIN_DARK = '#4a2e1f';
 const VESHTI = '#eee8d6';
-const TOWEL = '#f4f1e8';
-const HAIR = '#1c1512';
 
-interface Look {
-  shirt: string | null;
-  veshti: string;
-  checked: boolean;
-}
-
-/** Per-farmer look: bare-chested with a towel, or a light half-sleeve shirt; white veshti or a checked lungi. */
-function lookFor(seed: number): Look {
+/** Per-farmer look: bare-chested, or a light half-sleeve shirt; a white or cream veshti. */
+function lookFor(seed: number): FarmerLook {
   const r = hash01(seed * 7.13);
   const shirts = ['#d9d4c3', '#8fb2c9', '#c9b27a'];
   return {
     shirt: r < 0.55 ? shirts[Math.floor(hash01(seed * 3.1) * shirts.length)]! : null,
     veshti: hash01(seed * 5.7) < 0.4 ? '#e2d9bf' : VESHTI,
-    checked: false,
   };
 }
 
-function useFarmerGeometry(look: Look) {
+function useFarmerGeometry(look: FarmerLook) {
   return useMemo(() => {
-    const torsoColor = look.shirt ?? SKIN;
-    // Pelvis + folded veshti (knee length, tucked up for field work) with a belt fold at the waist.
-    const veshti = shadeY(buildColored([
-      [at(new THREE.CylinderGeometry(0.19, 0.235, 0.46, 14, 1, true), 0, -0.15, 0), look.veshti],
-      [at(new THREE.CylinderGeometry(0.236, 0.236, 0.03, 14, 1, true), 0, -0.395, 0), '#b9a77f'], // hem border
-      [at(new THREE.CylinderGeometry(0.205, 0.205, 0.06, 14), 0, 0.1, 0), '#d8d0b8'],
-      [at(new THREE.TorusGeometry(0.2, 0.022, 6, 14).rotateX(Math.PI / 2), 0, 0.07, 0), '#bba98a'],
-    ]), -0.5, 0.12, 0.3);
-
-    const torso = shadeY(buildColored([
-      [at(ellipsoid(0.165, 0.27, 0.1, 12, 9), 0, 0.27, 0), torsoColor],
-      [at(ellipsoid(0.2, 0.09, 0.105, 12, 8), 0, 0.46, 0), torsoColor],
-      [at(limb(0.05, 0.06, 0.1, 8).rotateX(0), 0, 0.56, 0), SKIN], // neck
-      // Towel (thundu) draped over the left shoulder.
-      [at(new THREE.BoxGeometry(0.1, 0.46, 0.012).rotateZ(-0.12), -0.13, 0.33, 0.1), TOWEL],
-      [at(new THREE.BoxGeometry(0.11, 0.07, 0.2), -0.2, 0.5, 0), TOWEL],
-      [at(new THREE.BoxGeometry(0.1, 0.4, 0.012).rotateZ(-0.12), -0.15, 0.33, -0.1), '#e8e4d6'],
-    ]), -0.05, 0.6, 0.25);
-
-    const head = buildColored([
-      [at(ellipsoid(0.088, 0.112, 0.098, 12, 10), 0, 0.09, 0), SKIN],
-      [at(ellipsoid(0.02, 0.026, 0.026, 6, 5), 0, 0.075, 0.1), SKIN_DARK], // nose
-      [at(ellipsoid(0.03, 0.01, 0.012, 6, 4), 0, 0.045, 0.092), HAIR], // moustache
-      [at(ellipsoid(0.014, 0.008, 0.01, 5, 4), -0.034, 0.105, 0.088), '#16100c'],
-      [at(ellipsoid(0.014, 0.008, 0.01, 5, 4), 0.034, 0.105, 0.088), '#16100c'],
-      [at(ellipsoid(0.014, 0.03, 0.018, 5, 5), -0.088, 0.09, 0), SKIN_DARK], // ears
-      [at(ellipsoid(0.014, 0.03, 0.018, 5, 5), 0.088, 0.09, 0), SKIN_DARK],
-      // Head towel (thalapa): a wrapped band with a knot at the front.
-      [at(new THREE.TorusGeometry(0.093, 0.032, 7, 16).rotateX(Math.PI / 2), 0, 0.178, 0), TOWEL],
-      [at(ellipsoid(0.095, 0.045, 0.1, 10, 6), 0, 0.2, -0.005), TOWEL],
-      [at(ellipsoid(0.03, 0.026, 0.026, 6, 5), 0.03, 0.18, 0.1), '#e6e1d2'],
-    ]);
-
-    const upperArm = buildColored([[limb(0.043, 0.036, 0.29, 7), look.shirt ?? SKIN]]);
-    const foreArm = buildColored([
-      [limb(0.034, 0.027, 0.26, 7), SKIN],
-      [at(ellipsoid(0.03, 0.045, 0.02, 6, 5), 0, -0.29, 0), SKIN_DARK], // hand
-    ]);
-    const thigh = buildColored([[limb(0.075, 0.055, 0.44, 8), SKIN]]);
-    const shin = buildColored([
-      [limb(0.052, 0.036, 0.43, 8), SKIN],
-      [at(ellipsoid(0.04, 0.025, 0.1, 7, 5), 0, -0.45, 0.04), SKIN_DARK], // foot
-    ]);
     // Mamatti (spade): origin at the blade tip, handle along +y with a D-grip.
     const mk = () => buildColored([
-      [at(new THREE.BoxGeometry(0.2, 0.26, 0.012), 0, 0.13, 0), '#8c8f93'],
-      [at(new THREE.CylinderGeometry(0.014, 0.014, 1.0, 6), 0, 0.72, 0), '#7a5a3a'],
-      [at(new THREE.TorusGeometry(0.05, 0.011, 5, 10), 0, 1.2, 0), '#7a5a3a'],
+      [at(new THREE.BoxGeometry(0.2, 0.26, 0.012), 0, 0.13, 0), '#8c8f93', 'metal'],
+      [at(new THREE.CylinderGeometry(0.014, 0.014, 1.0, 10), 0, 0.72, 0), '#7a5a3a', 'wood'],
+      [at(new THREE.TorusGeometry(0.05, 0.011, 8, 16), 0, 1.2, 0), '#7a5a3a', 'wood'],
     ]);
-    const spade = mk();
-    const spadeStuck = mk();
-    return { veshti, torso, head, upperArm, foreArm, thigh, shin, spade, spadeStuck };
+    return { ...farmerGeometry(look), spade: mk(), spadeStuck: mk() };
   }, [look]);
 }
 
@@ -95,8 +41,8 @@ export function Farmer({ seed, activity, viewFrom }: { seed: number; activity: n
   const look = useMemo(() => lookFor(seed), [seed]);
   const geos = useFarmerGeometry(look);
   const mats = useMemo(() => ({
-    body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 }),
-    cloth: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }),
+    body: createOrganicMaterial(),
+    cloth: createOrganicMaterial({ side: THREE.DoubleSide }),
   }), []);
   useEffect(() => () => {
     Object.values(geos).forEach((g) => g.dispose());
@@ -237,7 +183,8 @@ export function Farmer({ seed, activity, viewFrom }: { seed: number; activity: n
           <group ref={armL} position={[-0.2, 0.47, 0]}>
             <mesh geometry={geos.upperArm} material={mats.body} castShadow />
             <group ref={foreL} position={[0, -0.28, 0]}>
-              <mesh geometry={geos.foreArm} material={mats.body} castShadow />
+              {/* The hand is modelled as a right hand; mirror it so the left palm also faces the thigh. */}
+              <mesh geometry={geos.foreArm} material={mats.body} scale={[-1, 1, 1]} castShadow />
             </group>
           </group>
           <group ref={armR} position={[0.2, 0.47, 0]}>

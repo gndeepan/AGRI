@@ -29,4 +29,6 @@ export interface VirtualFieldProps {
   irrigationMethod?: string;
   /** The live sky for this moment (features/sky). Lights the scene; derived from `state` if omitted. */
   sky?: SkyParams;
+  /** Stop rendering (e.g. while the single-plant view covers the field). */
+  paused?: boolean;
 }

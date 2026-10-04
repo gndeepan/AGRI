@@ -573,7 +573,23 @@
     "missingInputs": "Missing information that would improve this estimate",
     "assumptions": "Assumptions",
     "references": "References",
-    "notYield": "Stage dates are model estimates, not measurements of your plants. Bhoomi does not predict yield."
+    "notYield": "Stage dates are model estimates, not measurements of your plants. Bhoomi does not predict yield.",
+    "plantView": {
+      "open": "Single plant",
+      "openHint": "See one plant of your crop close up, at this date",
+      "close": "Back to field",
+      "title": "Current crop growth",
+      "height": "Height",
+      "tillers": "Tillers",
+      "panicle": "Panicles out",
+      "flowering": "In flower",
+      "fruiting": "Fruit / heads set",
+      "ripeness": "Ripeness",
+      "notPresent": "No plants in the field on this date.",
+      "seedling": "Seedling in the nursery bed",
+      "canvasLabel": "One plant of your crop, close up",
+      "note": "Illustration of the crop model, not a photo of your field. Drag to turn, scroll to zoom."
+    }
   },
   "records": {
     "title": "Records & analytics",

@@ -7,7 +7,7 @@ import { signedDistanceToEdge, type FieldShape } from '../fieldShape';
 import type { GrowthParams } from '../growth';
 import { mulberry32 } from '../prng';
 import { useSceneSettings } from '../quality';
-import { createCanopyGeometry, createCanopyMaterial } from './canopyMaterial';
+import { CANOPY_RENDER_ORDER, createCanopyGeometry, createCanopyMaterial } from './canopyMaterial';
 import { createFarGroundMaterial } from './farGround';
 import { createFlatPolygon, useField } from './FieldContext';
 import { blocksPlot, planLandscape } from '../landscape';
@@ -457,9 +457,9 @@ function Surroundings({ mudMaterial, growth }: { mudMaterial: THREE.Material; gr
           <meshStandardMaterial color="#8da39c" roughness={0.12} metalness={0.05} transparent opacity={0.82} depthWrite={false} envMapIntensity={1.6} />
         </mesh>
       )}
-      {geos.same && <mesh geometry={geos.same} material={mats.same.material} />}
-      {geos.younger && <mesh geometry={geos.younger} material={mats.younger.material} />}
-      {geos.stubble && <mesh geometry={geos.stubble} material={mats.stubble.material} />}
+      {geos.same && <mesh geometry={geos.same} material={mats.same.material} renderOrder={CANOPY_RENDER_ORDER} />}
+      {geos.younger && <mesh geometry={geos.younger} material={mats.younger.material} renderOrder={CANOPY_RENDER_ORDER} />}
+      {geos.stubble && <mesh geometry={geos.stubble} material={mats.stubble.material} renderOrder={CANOPY_RENDER_ORDER} />}
       {geos.bunds && (
         <mesh geometry={geos.bunds} receiveShadow>
           <meshStandardMaterial vertexColors roughness={0.95} />

@@ -13,8 +13,10 @@ import {
   Droplets,
   Eye,
   FileDown,
+  Map as MapIcon,
   MessageCircle,
   RefreshCw,
+  Sprout,
   Thermometer,
   Volume2,
   VolumeX,
@@ -23,7 +25,7 @@ import {
 import { cyclesApi } from '@/api/endpoints'
 import { qk, useCycle, useLand, useTimeline, useUpdateTask, useWeather } from '@/api/queries'
 import type { CycleDetail, TimelineDay } from '@/api/types'
-import { VirtualField, detectWebGL } from '@/features/field3d'
+import { PlantView, VirtualField, detectWebGL, plantFacts } from '@/features/field3d'
 import { PlanActionsMenu } from '@/features/plans/PlanActions'
 import { NativeSelect } from '@/components/ui/native-select'
 import { WEBGL_FAILED_EVENT } from '@/features/field3d/WebGLBoundary'
@@ -115,7 +117,7 @@ export default function FieldExperience() {
     <div className="-mx-4 -mt-6 sm:-mx-6 lg:-mx-10 lg:-mt-10">
       {/* immersive scene */}
       <section className="relative h-[58svh] min-h-[340px] w-full overflow-hidden bg-paddy-950 sm:h-[64svh]">
-        {c && tl ? <SceneLayer cycle={c} timeline={tl} /> : <Skeleton className="h-full w-full rounded-none" />}
+        {c && tl ? <SceneLayer cycle={c} timeline={tl} stageName={stageName} /> : <Skeleton className="h-full w-full rounded-none" />}
         <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-2 bg-gradient-to-b from-black/45 to-transparent p-4 sm:p-6">
           <div className="pointer-events-auto text-soil-50">
             {c ? (
@@ -177,8 +179,9 @@ export default function FieldExperience() {
 }
 
 /** Renders 3D (paddy, WebGL available) or the 2D fallback, driven by the shared simulation clock. */
-function SceneLayer({ cycle, timeline }: { cycle: CycleDetail; timeline: TimelineDay[] }) {
+function SceneLayer({ cycle, timeline, stageName }: { cycle: CycleDetail; timeline: TimelineDay[]; stageName: (k: string) => string }) {
   const { t } = useTranslation()
+  const [plantView, setPlantView] = useState(false)
   const { sceneQuality, soundEnabled } = useUi()
   const [webgl, setWebgl] = useState(() => detectWebGL())
   useEffect(() => {
@@ -222,11 +225,32 @@ function SceneLayer({ cycle, timeline }: { cycle: CycleDetail; timeline: Timelin
             sky={sky?.params}
             quality={sceneQuality}
             soundEnabled={soundEnabled}
+            paused={plantView}
             className="absolute inset-0"
           />
         </Suspense>
       ) : (
         <Field2D state={state} className="absolute inset-0" />
+      )}
+      {use3D && plantView && (
+        <div className="absolute inset-0" data-testid="plant-view">
+          <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
+            <PlantView state={state} cropSlug={cycle.crop.slug} label={t('field.plantView.canvasLabel')} className="absolute inset-0" />
+          </Suspense>
+          <PlantGrowthPanel state={state} cropSlug={cycle.crop.slug} stage={stageName(timeline[Math.min(timeline.length - 1, Math.max(0, Math.floor(position)))]?.stage_key ?? state.stageKey)} />
+        </div>
+      )}
+      {use3D && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="glass absolute bottom-28 left-3 sm:bottom-4 sm:left-6"
+          onClick={() => setPlantView((v) => !v)}
+          aria-pressed={plantView}
+          title={plantView ? undefined : t('field.plantView.openHint')}
+        >
+          {plantView ? <><MapIcon /> {t('field.plantView.close')}</> : <><Sprout /> {t('field.plantView.open')}</>}
+        </Button>
       )}
       {!use3D && (
         <div className="absolute bottom-14 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-[11px] text-soil-50">
@@ -234,6 +258,60 @@ function SceneLayer({ cycle, timeline }: { cycle: CycleDetail; timeline: Timelin
         </div>
       )}
     </>
+  )
+}
+
+/** Numbers behind the single-plant view: what the crop model says one plant looks like today. */
+function PlantGrowthPanel({ state, cropSlug, stage }: { state: FieldVisualState; cropSlug: string; stage: string }) {
+  const { t, i18n } = useTranslation()
+  const lang = i18n.language
+  const f = useMemo(() => plantFacts(state, cropSlug), [state, cropSlug])
+  const pct = (v: number) => `${formatNumber(v * 100, 0, lang)}%`
+  const rows: Array<[string, string]> = !f.present
+    ? []
+    : f.kind === 'paddy'
+      ? [
+          [t('field.plantView.height'), `${formatNumber(f.heightM * 100, 0, lang)} cm`],
+          [t('field.plantView.tillers'), formatNumber(f.tillers, 0, lang)],
+          ...(f.panicle > 0.02 ? [[t('field.plantView.panicle'), pct(f.panicle)] as [string, string]] : []),
+          ...(f.ripeness > 0.05 ? [[t('field.plantView.ripeness'), pct(f.ripeness)] as [string, string]] : []),
+        ]
+      : [
+          [t('field.plantView.height'), `${formatNumber(f.heightM * 100, 0, lang)} cm`],
+          ...(f.flowering > 0.02 ? [[t('field.plantView.flowering'), pct(f.flowering)] as [string, string]] : []),
+          ...(f.fruiting > 0.02 ? [[t('field.plantView.fruiting'), pct(f.fruiting)] as [string, string]] : []),
+          ...(f.ripeness > 0.05 ? [[t('field.plantView.ripeness'), pct(f.ripeness)] as [string, string]] : []),
+        ]
+  return (
+    <div className="glass pointer-events-auto absolute bottom-40 left-3 w-[min(17rem,calc(100%-1.5rem))] rounded-2xl p-3 text-xs sm:bottom-16 sm:left-6">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">{t('field.plantView.title')}</span>
+        <DataKindBadge kind="model_output" />
+      </div>
+      <div className="mt-1.5 flex items-center gap-2">
+        <span className="size-2.5 shrink-0 rounded-full" style={{ background: stageColor(toGrowthStage(state.stageKey)) }} />
+        <span className="font-display text-sm font-semibold">{stage}</span>
+        <span className="ml-auto tabular-nums opacity-80">
+          {pct(state.stageProgress)}
+          {/* Phones show only this line; the height rides along so the plant stays uncovered. */}
+          {f.present && <span className="sm:hidden"> · {formatNumber(f.heightM * 100, 0, lang)} cm</span>}
+        </span>
+      </div>
+      {f.kind === 'paddy' && f.seedling && <p className="mt-1 hidden opacity-80 sm:block">{t('field.plantView.seedling')}</p>}
+      {!f.present ? (
+        <p className="mt-2 hidden sm:block">{t('field.plantView.notPresent')}</p>
+      ) : (
+        <dl className="mt-2 hidden grid-cols-2 gap-x-3 gap-y-1 sm:grid">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="opacity-80">{k}</dt>
+              <dd className="text-right font-semibold tabular-nums">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <p className="mt-2 hidden text-[10px] leading-snug opacity-75 sm:block">{t('field.plantView.note')}</p>
+    </div>
   )
 }
 

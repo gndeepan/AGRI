@@ -23,7 +23,7 @@ import { LifeLayer } from './scene/LifeLayer';
 import { sceneLightingFromSky } from './sky';
 import { skyFromVisualState } from '@/features/sky/fromTimeline';
 import type { VirtualFieldProps } from './types';
-import { announceWebGLFailure, WebGLBoundary } from './WebGLBoundary';
+import { WebGLBoundary, watchContextLoss } from './WebGLBoundary';
 
 // Non-paddy crops: plant generators, tilled soil and birds load only when needed.
 const UplandScene = lazy(() => import('./crops/UplandScene'));
@@ -126,8 +126,9 @@ function FocusedDepthOfField({ shape, mode }: { shape: FieldShape; mode: ViewMod
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3 } | null;
   const focus = useRef(0);
-  // A generous in-focus zone: only the far village, groves and horizon go soft.
-  const sharp = Math.max(45, shape.radius * 1.6);
+  // A very generous in-focus zone: the field and its surroundings stay crisp; only the far horizon
+  // softens slightly (a strong blur read as a miniature / tilt-shift toy).
+  const sharp = Math.max(140, shape.radius * 3.5);
   useFrame((_, dt) => {
     const dof = ref.current;
     if (!dof) return;
@@ -138,19 +139,21 @@ function FocusedDepthOfField({ shape, mode }: { shape: FieldShape; mode: ViewMod
     const m = dof.circleOfConfusionMaterial;
     m.focusDistance = focus.current;
     // Everything within the field's own extent stays in focus; blur grows beyond it.
-    m.focusRange = mode === 'eye' ? 34 : sharp;
+    m.focusRange = mode === 'eye' ? 110 : sharp;
   });
-  return <DepthOfField ref={ref as never} focusDistance={20} focusRange={sharp} bokehScale={mode === 'eye' ? 1.7 : 1.4} resolutionScale={0.5} />;
+  return <DepthOfField ref={ref as never} focusDistance={20} focusRange={sharp} bokehScale={mode === 'eye' ? 0.55 : 0.45} resolutionScale={0.5} />;
 }
 
-function Effects({ fx, shape, mode, depthOfField }: { fx: FxLevel; shape: FieldShape; mode: ViewMode; depthOfField: boolean }) {
+function Effects({ fx, shape, mode, depthOfField, night }: { fx: FxLevel; shape: FieldShape; mode: ViewMode; depthOfField: boolean; night: number }) {
+  // A dark vignette on an already dark night scene hides the crop at the edges of the frame.
+  const vignette = 1 - 0.6 * night;
   // ACES keeps the saturated greens of a paddy; AgX greyed them out.
   if (fx === 'low') {
     return (
       <EffectComposer multisampling={0}>
         <Bloom intensity={0.25} luminanceThreshold={0.9} mipmapBlur />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-        <Vignette offset={0.3} darkness={0.45} />
+        <Vignette offset={0.3} darkness={0.45 * vignette} />
       </EffectComposer>
     );
   }
@@ -160,21 +163,22 @@ function Effects({ fx, shape, mode, depthOfField }: { fx: FxLevel; shape: FieldS
       {depthOfField ? <FocusedDepthOfField shape={shape} mode={mode} /> : <></>}
       <Bloom intensity={0.35} luminanceThreshold={0.85} luminanceSmoothing={0.2} mipmapBlur />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-      <Vignette offset={0.28} darkness={0.5} />
+      <Vignette offset={0.28} darkness={0.5 * vignette} />
       <SMAA />
     </EffectComposer>
   );
 }
 
 export default function VirtualFieldCanvas({
-  state, quality = 'auto', soundEnabled = false, className, boundary, cropSlug, irrigationMethod, sky: skyProp,
+  state, quality = 'auto', soundEnabled = false, className, boundary, cropSlug, irrigationMethod, sky: skyProp, paused = false,
 }: VirtualFieldProps) {
   const container = useRef<HTMLDivElement>(null);
   const visible = useOnScreen(container);
   const reducedMotion = usePrefersReducedMotion();
   const [autoQuality, setAutoQuality] = useState<ResolvedQuality>(() => detectQuality());
   const resolved: ResolvedQuality = quality === 'auto' ? autoQuality : quality;
-  const [mode, setMode] = useState<ViewMode>('orbit');
+  // Open standing on the bund at eye height, as a farmer sees the field; the orbit view is one tap away.
+  const [mode, setMode] = useState<ViewMode>('eye');
 
   const shape = useMemo(() => fieldShapeFromPolygon(boundary), [boundary]);
   const framing = useMemo(() => frameField(shape, mode), [shape, mode]);
@@ -216,7 +220,7 @@ export default function VirtualFieldCanvas({
   const wildlife = lighting.daylight * (1 - rain) * (1 - cloudCover * 0.4);
   const fireflies = lighting.night * (1 - rain) * (resolved === 'high' ? 1 : 0.7);
 
-  useAmbientSound(soundEnabled, { daylight: lighting.daylight, night: lighting.night, rain, wind: windStrength });
+  useAmbientSound(soundEnabled && !paused, { daylight: lighting.daylight, night: lighting.night, rain, wind: windStrength });
 
   const settings = useMemo(() => ({ quality: resolved, reducedMotion }), [resolved, reducedMotion]);
   // Staged fallback when the frame rate drops: drop AO first, then depth of field, then go low.
@@ -234,17 +238,14 @@ export default function VirtualFieldCanvas({
         <Canvas
           shadows={resolved === 'high' ? 'percentage' : false}
           dpr={resolved === 'high' ? [1, 1.75] : [0.75, 1.25]}
-          frameloop={visible ? 'always' : 'never'}
+          frameloop={visible && !paused ? 'always' : 'never'}
           camera={{ position: framing.camera, fov: mode === 'eye' ? 62 : 42, near: 0.05, far: 5000 }}
           gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false }}
           onCreated={({ gl, scene }) => {
             // Tone mapping happens in the post-processing chain (AgX).
             gl.toneMapping = THREE.NoToneMapping;
             if (import.meta.env.DEV) Object.assign(window, { __bhoomiGl: gl, __bhoomiScene: scene });
-            gl.domElement.addEventListener('webglcontextlost', (e) => {
-              e.preventDefault();
-              announceWebGLFailure('context_lost');
-            });
+            watchContextLoss(gl.domElement);
           }}
           aria-label={upland ? `Simulated ${upland.slug.replace('-', ' ')} field visualisation` : 'Simulated paddy field visualisation'}
         >
@@ -313,7 +314,7 @@ export default function VirtualFieldCanvas({
                 zoomSpeed={0.8}
               />
               <CameraRig framing={framing} />
-              <Effects fx={fx} shape={shape} mode={mode} depthOfField={depthOfField} />
+              <Effects fx={fx} shape={shape} mode={mode} depthOfField={depthOfField} night={lighting.night} />
             </FieldContext.Provider>
           </SceneSettingsContext.Provider>
         </Canvas>
@@ -341,7 +342,7 @@ function ScaleLabel({ shape, mode, onToggle }: { shape: FieldShape; mode: ViewMo
           border: '1px solid rgba(255,255,255,0.25)', borderRadius: 999, padding: '7px 11px', backdropFilter: 'blur(6px)', cursor: 'pointer',
         }}
       >
-        {mode === 'eye' ? '⟲ Orbit view' : '👁 Stand on the bund'}
+        {mode === 'eye' ? '⟲ Orbit view' : 'Stand on the bund'}
       </button>
       <div
         data-testid="field-scale"

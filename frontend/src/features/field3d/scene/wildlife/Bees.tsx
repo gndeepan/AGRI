@@ -5,6 +5,7 @@ import { mulberry32 } from '../../prng';
 import { sceneTime, useSceneSettings } from '../../quality';
 import { useField } from '../FieldContext';
 import { at, buildColored, ellipsoid } from './geo';
+import { createOrganicMaterial } from './organicMaterial';
 
 /** Honeybees working the flowers: hover over one bloom, then dart to the next, wings a blur. */
 export function Bees({ count, canopyHeight }: { count: number; canopyHeight: number }) {
@@ -16,12 +17,16 @@ export function Bees({ count, canopyHeight }: { count: number; canopyHeight: num
       [at(ellipsoid(0.0072, 0.0072, 0.003, 6, 4), 0, 0, -0.002), '#1c1408'],
       [at(ellipsoid(0.0072, 0.0072, 0.003, 6, 4), 0, 0, -0.008), '#1c1408'],
       [at(ellipsoid(0.005, 0.005, 0.005, 5, 4), 0, 0.001, 0.012), '#2a1d10'],
-    ]),
+    ], 'horn'),
     wing: (() => { const g = new THREE.PlaneGeometry(0.012, 0.007); g.translate(0.007, 0, 0); return g; })(),
   }), []);
   const mats = useMemo(() => ({
-    body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 }),
-    wing: new THREE.MeshStandardMaterial({ color: '#e6f2ff', transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
+    body: createOrganicMaterial(),
+    // Thin membrane: glassy, iridescent at grazing angles.
+    wing: new THREE.MeshPhysicalMaterial({
+      color: '#eef6ff', transparent: true, opacity: 0.3, side: THREE.DoubleSide, roughness: 0.15,
+      iridescence: 0.8, iridescenceIOR: 1.3, depthWrite: false,
+    }),
   }), []);
   useEffect(() => () => { geos.body.dispose(); geos.wing.dispose(); mats.body.dispose(); mats.wing.dispose(); }, [geos, mats]);
   const rnd = useMemo(() => { const r = mulberry32(88); return Array.from({ length: count }, () => ({ ox: (r() - 0.5) * 8, oz: (r() - 0.5) * 6, ph: r() * 20, period: 3 + r() * 2 })); }, [count]);

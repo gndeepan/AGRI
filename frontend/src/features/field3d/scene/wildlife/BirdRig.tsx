@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { birdGeos, type Species } from './birdSpecs';
 import type { BirdPose } from './birdBehavior';
+import { createOrganicMaterial } from './organicMaterial';
 
 /** Shared materials, one pair for every bird in the scene. */
 const makeMats = () => ({
-  body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }),
-  wing: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
+  body: createOrganicMaterial(),
+  wing: createOrganicMaterial({ side: THREE.DoubleSide }),
 });
 
 export interface BirdHandle {

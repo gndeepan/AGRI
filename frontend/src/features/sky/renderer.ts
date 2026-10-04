@@ -37,6 +37,11 @@ export interface RenderOptions {
   bolt?: boolean
   /** Whole-frame flash on lightning (default on). A 3D scene lights its field instead. */
   screenFlash?: boolean
+  /**
+   * Leave the moon out and write its visibility (through cloud, rain and fog) to alpha, for a 3D scene
+   * that draws a sharp, full-resolution moon over this (smaller) sky image itself.
+   */
+  moonOverlay?: boolean
 }
 
 export interface FrameInfo {
@@ -101,7 +106,7 @@ function program(gl: GL, vs: string, fs: string, names: string[]): { prog: WebGL
 }
 
 const SKY_UNIFORMS = [
-  'uRes', 'uTime', 'uFwd', 'uRight', 'uUp', 'uTanHalfFov', 'uSunDir', 'uMoonDir', 'uMoonPhase', 'uZenith', 'uHorizon',
+  'uRes', 'uTime', 'uFwd', 'uRight', 'uUp', 'uTanHalfFov', 'uSunDir', 'uMoonDir', 'uMoonPhase', 'uMoonOverlay', 'uZenith', 'uHorizon',
   'uSunColor', 'uCloudLit', 'uCloudShadow', 'uFogColor', 'uSunVis', 'uDaylight', 'uCloud', 'uOvercast', 'uConvective',
   'uRain', 'uThunder', 'uFog', 'uMist', 'uWind', 'uFlash', 'uFlashPos', 'uSeed', 'uCumulus', 'uCumulusW', 'uCumulusTexel',
 ]
@@ -340,6 +345,7 @@ function build(gl: GL, canvas: HTMLCanvasElement | OffscreenCanvas | null): SkyR
     gl.uniform3fv(u.uSunDir, sunDir)
     gl.uniform3fv(u.uMoonDir, moonDir)
     gl.uniform1f(u.uMoonPhase, p.moonPhase)
+    gl.uniform1f(u.uMoonOverlay, opts.moonOverlay ? 1 : 0)
     gl.uniform3fv(u.uZenith, pal.zenith)
     gl.uniform3fv(u.uHorizon, pal.horizon)
     gl.uniform3fv(u.uSunColor, pal.sunColor)

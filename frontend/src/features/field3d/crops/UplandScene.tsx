@@ -1,11 +1,12 @@
 import { useFrame } from '@react-three/fiber';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { hillsAround, insideField } from '../fieldShape';
 import { mulberry32 } from '../prng';
 import { sceneTime, useSceneSettings } from '../quality';
 import { useField } from '../scene/FieldContext';
+import type { BirdPose } from '../scene/wildlife/birdBehavior';
+import { applyRig, BirdRig } from '../scene/wildlife/BirdRig';
 import type { CropVisual } from './cropGrowth';
 import type { CropSpec } from './specs';
 import { UplandCrop, type UplandLod } from './UplandCrop';
@@ -44,31 +45,9 @@ export default function UplandScene({ spec, visual, windStrength, windDirection,
   );
 }
 
-type BirdKind = CropSpec['birds'];
-
-/** Rose-ringed parakeet (green, red beak, long tail) or common myna (brown, yellow beak and eye patch). */
-function useBirdParts(kind: BirdKind) {
-  return useMemo(() => {
-    const body = new THREE.SphereGeometry(0.045, 10, 8);
-    body.scale(1, 0.9, kind === 'parakeet' ? 1.5 : 1.6);
-    body.translate(0, 0.05, 0);
-    const head = new THREE.SphereGeometry(kind === 'parakeet' ? 0.032 : 0.03, 8, 6);
-    head.translate(0, 0.095, 0.05);
-    const tail = new THREE.ConeGeometry(0.018, kind === 'parakeet' ? 0.2 : 0.07, 4);
-    tail.rotateX(-Math.PI / 2 - 0.5);
-    tail.translate(0, kind === 'parakeet' ? 0.0 : 0.04, kind === 'parakeet' ? -0.13 : -0.08);
-    const beak = new THREE.ConeGeometry(0.011, 0.03, 5);
-    beak.rotateX(Math.PI / 2 + (kind === 'parakeet' ? 0.6 : 0.1));
-    beak.translate(0, 0.088, 0.085);
-    const merge = (list: THREE.BufferGeometry[]) => {
-      const parts = list.map((g) => (g.index ? g.toNonIndexed() : g));
-      parts.forEach((g) => g.deleteAttribute('uv'));
-      const m = mergeGeometries(parts, false) ?? new THREE.BufferGeometry();
-      list.forEach((g) => g.dispose());
-      return m;
-    };
-    return { plumage: merge([body, head, tail]), beak };
-  }, [kind]);
+/** Standing at the rig's origin, wings folded, legs down; the owning group places and turns the bird. */
+function perchPose(): BirdPose {
+  return { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, neck: 0.6, neckDrop: 0, flap: 0, flapAmp: 0, gait: 0, gaitAmp: 0, legsTucked: false, state: 'perch' };
 }
 
 function PerchedBirds({ spec, canopyTop }: { spec: CropSpec; canopyTop: number }) {
@@ -76,14 +55,8 @@ function PerchedBirds({ spec, canopyTop }: { spec: CropSpec; canopyTop: number }
   const { quality, reducedMotion } = useSceneSettings();
   const { shape, focus } = useField();
   const count = quality === 'high' ? 6 : 3;
-  const parts = useBirdParts(kind);
-  const mats = useMemo(() => ({
-    plumage: new THREE.MeshStandardMaterial({ color: kind === 'parakeet' ? '#4caf3c' : '#5a3a28', roughness: 0.7 }),
-    beak: new THREE.MeshStandardMaterial({ color: kind === 'parakeet' ? '#c8221c' : '#f0c020', roughness: 0.5 }),
-  }), [kind]);
-  useEffect(() => () => {
-    parts.plumage.dispose(); parts.beak.dispose(); mats.plumage.dispose(); mats.beak.dispose();
-  }, [parts, mats]);
+  // One fixed pose per bird (perched, wings folded); the group moves and turns it.
+  const poses = useMemo(() => Array.from({ length: count }, () => ({ current: perchPose() })), [count]);
   const birds = useMemo(() => {
     const rand = mulberry32(kind === 'parakeet' ? 909 : 707);
     return Array.from({ length: count }, () => ({ ang: rand() * Math.PI * 2, r: 2 + rand() * 7, yaw: rand() * Math.PI * 2, phase: rand() * 20 }));
@@ -107,14 +80,17 @@ function PerchedBirds({ spec, canopyTop }: { spec: CropSpec; canopyTop: number }
       g.position.set(x, kind === 'parakeet' ? canopyTop * 0.97 : hop, z);
       g.rotation.y = b.yaw + (reducedMotion ? 0 : Math.sin(t * 0.4 + b.phase) * 0.6);
       g.rotation.x = reducedMotion ? 0 : Math.max(0, Math.sin(t * 0.9 + b.phase) - 0.8) * 2.5;
+      // Pecking and looking around: neck drops briefly, head turns with the body.
+      const pose = poses[i]!.current;
+      pose.neckDrop = reducedMotion ? 0 : Math.max(0, Math.sin(t * 1.7 + b.phase * 3) - 0.6) * 1.6;
+      applyRig(g);
     });
   });
   return (
     <group>
       {birds.map((_, i) => (
         <group key={i} ref={(el) => { refs.current[i] = el; }}>
-          <mesh geometry={parts.plumage} material={mats.plumage} castShadow />
-          <mesh geometry={parts.beak} material={mats.beak} />
+          <BirdRig species={kind} poseRef={poses[i]!} />
         </group>
       ))}
     </group>

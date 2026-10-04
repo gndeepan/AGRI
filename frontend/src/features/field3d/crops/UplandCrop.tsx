@@ -3,19 +3,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { hillsAround, nearestPointInside, type Hill } from '../fieldShape';
 import { damp, sceneTime, useSceneSettings, type ResolvedQuality } from '../quality';
-import { createCanopyGeometry, createCanopyMaterial } from '../scene/canopyMaterial';
+import { CANOPY_RENDER_ORDER, createCanopyGeometry, createCanopyMaterial } from '../scene/canopyMaterial';
 import { useField } from '../scene/FieldContext';
 import { setSrgb } from '../scene/plantMaterials';
 import { shedsLeaves, type CropVisual } from './cropGrowth';
 import { createCropMaterials } from './material';
 import { buildPlant } from './plants';
+import { buildFarPlant } from './plants/far';
 import type { CropSpec } from './specs';
 import { applyCanopy } from './UplandGround';
 
 /** Vertex budgets per tier: detailed plants near the camera, simpler ones further out. */
-const BUDGET: Record<ResolvedQuality, { near: number; mid: number; maxNear: number; maxMid: number }> = {
-  high: { near: 2_400_000, mid: 3_000_000, maxNear: 5000, maxMid: 26000 },
-  low: { near: 600_000, mid: 800_000, maxNear: 1400, maxMid: 8000 },
+const BUDGET: Record<ResolvedQuality, { near: number; mid: number; maxNear: number; maxMid: number; far: number; maxFar: number }> = {
+  high: { near: 2_400_000, mid: 3_000_000, maxNear: 5000, maxMid: 26000, far: 4_500_000, maxFar: 150_000 },
+  low: { near: 600_000, mid: 800_000, maxNear: 1400, maxMid: 8000, far: 900_000, maxFar: 30_000 },
 };
 
 export interface UplandLod {
@@ -44,7 +45,7 @@ const up = new THREE.Vector3(0, 1, 0);
 const pos = new THREE.Vector3();
 const scl = new THREE.Vector3();
 
-function fill(target: ReturnType<typeof instanced>, hills: Hill[], baseY: number, facing: number | null) {
+function fill(target: ReturnType<typeof instanced>, hills: Hill[], baseY: number, facing: number | null, far = false) {
   const n = Math.min(hills.length, target.mesh.instanceMatrix.count);
   const arr = target.rand.array as Float32Array;
   for (let i = 0; i < n; i++) {
@@ -55,7 +56,8 @@ function fill(target: ReturnType<typeof instanced>, hills: Hill[], baseY: number
     m4.compose(pos.set(h.x, baseY, h.z), q, scl.set(1, 1, 1));
     target.mesh.setMatrixAt(i, m4);
     arr[i * 4] = 0.86 + 0.26 * ((h.r1 * 7.13 + h.r2) % 1);
-    arr[i * 4 + 1] = (h.r2 * 5.71 + h.r4) % 1;
+    // +10 marks a far-tier plant (see crops/material.ts).
+    arr[i * 4 + 1] = ((h.r2 * 5.71 + h.r4) % 1) + (far ? 10 : 0);
     arr[i * 4 + 2] = h.r3;
     arr[i * 4 + 3] = h.r4;
   }
@@ -88,7 +90,8 @@ export function UplandCrop({ spec, visual, windStrength, windDirection, wet, onP
   const variants = useMemo(() => {
     const near = [0, 1, 2].map((i) => buildPlant(spec, 'near', 1000 + i * 37));
     const mid = [0, 1].map((i) => buildPlant(spec, 'mid', 2000 + i * 53));
-    return { near, mid };
+    const far = buildFarPlant(spec, 3001);
+    return { near, mid, far };
   }, [spec]);
 
   const lod = useMemo<UplandLod>(() => {
@@ -102,6 +105,13 @@ export function UplandCrop({ spec, visual, windStrength, windDirection, wet, onP
     const r1 = Math.max(r0 + 2, Math.min(140, Math.sqrt(((near + mid) * per) / Math.PI)));
     return { r0, r1, near, mid };
   }, [quality, variants, spec]);
+  // Far tier: light plants filling the field well beyond the detailed rings, on its own coarse focus.
+  const far = useMemo(() => {
+    const b = BUDGET[quality];
+    const count = Math.max(1000, Math.min(b.maxFar, Math.floor(b.far / variants.far.getAttribute('position').count)));
+    const r = Math.sqrt((count * spec.rowM * spec.plantM) / Math.PI + lod.r1 * lod.r1);
+    return { count, r };
+  }, [quality, variants, spec, lod]);
 
   const mats = useMemo(() => createCropMaterials(wind), [wind]);
   const canopy = useMemo(() => createCanopyMaterial(wind), [wind]);
@@ -112,11 +122,14 @@ export function UplandCrop({ spec, visual, windStrength, windDirection, wet, onP
     const mid = variants.mid.map((g) => instanced(g, mats.material, mats.depth, lod.mid));
     near.forEach((m) => { m.mesh.castShadow = high; m.mesh.receiveShadow = high; });
     mid.forEach((m) => { m.mesh.receiveShadow = high; });
-    return { near, mid };
-  }, [variants, mats, lod, high]);
+    const farMesh = instanced(variants.far, mats.material, mats.depth, far.count);
+    return { near, mid, far: farMesh };
+  }, [variants, mats, lod, far, high]);
 
   const [patch, setPatch] = useState<[number, number]>(() => nearestPointInside(shape, shape.center[0], shape.center[1]));
   useEffect(() => setPatch(nearestPointInside(shape, shape.center[0], shape.center[1])), [shape]);
+  const [farPatch, setFarPatch] = useState<[number, number]>(() => nearestPointInside(shape, shape.center[0], shape.center[1]));
+  useEffect(() => setFarPatch(nearestPointInside(shape, shape.center[0], shape.center[1])), [shape]);
 
   const baseY = spec.ground.kind === 'flat' ? 0 : spec.ground.heightM;
   useEffect(() => {
@@ -126,15 +139,24 @@ export function UplandCrop({ spec, visual, windStrength, windDirection, wet, onP
     split(h0, meshes.near.length).forEach((hs, i) => fill(meshes.near[i]!, hs, baseY, facing));
     split(h1, meshes.mid.length).forEach((hs, i) => fill(meshes.mid[i]!, hs, baseY, facing));
     focus.set(patch[0], patch[1]);
-    const u = mats.uniforms;
-    u.uPatchCenter.value.set(patch[0], patch[1]);
-    u.uFadeStart.value = lod.r1 * 0.6;
-    u.uFadeEnd.value = lod.r1 * 0.98;
-    canopy.uniforms.uPatchCenter.value.set(patch[0], patch[1]);
-    canopy.uniforms.uFadeStart.value = lod.r1 * 0.6;
-    canopy.uniforms.uFadeEnd.value = lod.r1 * 0.98;
+    // Far-tier plants inside the detailed rings are drawn by those rings (same plants, same places).
+    mats.uniforms.uInner.value.set(patch[0], patch[1], lod.r1);
     onPatch(patch, lod);
-  }, [shape, patch, lod, meshes, spec, baseY, focus, mats, canopy, onPatch]);
+  }, [shape, patch, lod, meshes, spec, baseY, focus, mats, onPatch]);
+
+  useEffect(() => {
+    const facing = spec.facing === 'east' ? 0 : null;
+    fill(meshes.far, hillsAround(shape, farPatch, 0, far.r, far.count, spec.rowM, spec.plantM), baseY, facing, true);
+    const u = mats.uniforms;
+    // A wide, gradual cross-fade (half the radius) so real plants thin out into the canopy surface
+    // with no visible edge.
+    u.uPatchCenter.value.set(farPatch[0], farPatch[1]);
+    u.uFadeStart.value = far.r * 0.5;
+    u.uFadeEnd.value = far.r * 0.98;
+    canopy.uniforms.uPatchCenter.value.set(farPatch[0], farPatch[1]);
+    canopy.uniforms.uFadeStart.value = far.r * 0.5;
+    canopy.uniforms.uFadeEnd.value = far.r * 0.98;
+  }, [shape, farPatch, far, meshes, spec, baseY, mats, canopy]);
 
   useEffect(() => {
     const u = canopy.uniforms;
@@ -151,9 +173,9 @@ export function UplandCrop({ spec, visual, windStrength, windDirection, wet, onP
   }, [canopy, shape, spec, mats]);
 
   useEffect(() => () => {
-    [...meshes.near, ...meshes.mid].forEach((m) => m.mesh.geometry.dispose());
+    [...meshes.near, ...meshes.mid, meshes.far].forEach((m) => m.mesh.geometry.dispose());
   }, [meshes]);
-  useEffect(() => () => { [...variants.near, ...variants.mid].forEach((g) => g.dispose()); }, [variants]);
+  useEffect(() => () => { [...variants.near, ...variants.mid, variants.far].forEach((g) => g.dispose()); }, [variants]);
   useEffect(() => () => { mats.material.dispose(); mats.depth.dispose(); canopy.material.dispose(); }, [mats, canopy]);
   useEffect(() => () => canopyGeo.dispose(), [canopyGeo]);
 
@@ -178,6 +200,7 @@ export function UplandCrop({ spec, visual, windStrength, windDirection, wet, onP
       const ahead = Math.min(dist, lod.r1 * 0.45 + Math.max(0, cam.y) * 0.4);
       const want = nearestPointInside(shape, cam.x + (dx / dist) * ahead, cam.z + (dz / dist) * ahead, lod.r0 * 0.4);
       if (Math.hypot(want[0] - patch[0], want[1] - patch[1]) > lod.r1 * 0.2) setPatch(want);
+      if (Math.hypot(want[0] - farPatch[0], want[1] - farPatch[1]) > far.r * 0.25) setFarPatch(want);
     }
 
     const u = mats.uniforms;
@@ -205,7 +228,8 @@ export function UplandCrop({ spec, visual, windStrength, windDirection, wet, onP
     <group>
       {meshes.near.map((m, i) => <primitive key={`n${i}`} object={m.mesh} />)}
       {meshes.mid.map((m, i) => <primitive key={`m${i}`} object={m.mesh} />)}
-      <mesh geometry={canopyGeo} material={canopy.material} receiveShadow={high} position-y={baseY * 0.5} />
+      <primitive object={meshes.far.mesh} />
+      <mesh geometry={canopyGeo} material={canopy.material} receiveShadow={high} position-y={baseY * 0.5} renderOrder={CANOPY_RENDER_ORDER} />
     </group>
   );
 }

@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { FieldShape } from '../fieldShape';
 import { mulberry32 } from '../prng';
 import { useSceneSettings } from '../quality';
-import { createCanopyGeometry, createCanopyMaterial } from '../scene/canopyMaterial';
+import { CANOPY_RENDER_ORDER, createCanopyGeometry, createCanopyMaterial } from '../scene/canopyMaterial';
 import { createFarGroundMaterial } from '../scene/farGround';
 import { createFlatPolygon, useField } from '../scene/FieldContext';
 import { BundGrass, Bunds, buildBundGeometry, layoutPlots, plotShape } from '../scene/Ground';
@@ -277,8 +277,8 @@ function UplandSurroundings({ spec, visual, soilMaterial }: { spec: CropSpec; vi
         <primitive object={farMaterial} attach="material" />
       </mesh>
       {geos.soil && <mesh geometry={geos.soil} material={soilMaterial} position-y={-0.01} receiveShadow />}
-      {geos.same && <mesh geometry={geos.same} material={mats.same.material} />}
-      {geos.younger && <mesh geometry={geos.younger} material={mats.younger.material} />}
+      {geos.same && <mesh geometry={geos.same} material={mats.same.material} renderOrder={CANOPY_RENDER_ORDER} />}
+      {geos.younger && <mesh geometry={geos.younger} material={mats.younger.material} renderOrder={CANOPY_RENDER_ORDER} />}
       {geos.bunds && (
         <mesh geometry={geos.bunds} receiveShadow>
           <meshStandardMaterial vertexColors roughness={0.95} />
@@ -300,6 +300,13 @@ export function applyCanopy(u: CanopyU, spec: CropSpec, v: CropVisual, heightSha
   u.uPanicleColor.value.setRGB(v.bloomColor[0], v.bloomColor[1], v.bloomColor[2], THREE.SRGBColorSpace).multiplyScalar(1.6);
   u.uPanicleCover.value = v.bloomCover;
   u.uSenescence.value = v.senescence * 0.6;
+  // Between the rows the far canopy shows this field's soil (red, black or alluvial), not generic mud.
+  const soil = SOILS[spec.soil];
+  u.uUnder.value.set(soil.dry).lerp(scratchSoil.set(soil.wet), 0.25 + 0.5 * u.uWet.value);
+  u.uUnderSet.value = 1;
+  u.uGroundCover.value = Math.min(0.95, Math.sqrt(Math.max(0, v.scale)) * v.leaves * (1 - 0.5 * v.senescence) * heightShare);
 }
+
+const scratchSoil = new THREE.Color();
 
 export type { FieldShape };

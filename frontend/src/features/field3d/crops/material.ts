@@ -30,6 +30,11 @@ export interface CropUniforms {
   uPatchCenter: THREE.IUniform<THREE.Vector2>;
   uFadeStart: THREE.IUniform<number>;
   uFadeEnd: THREE.IUniform<number>;
+  /**
+   * Far-tier plants hide inside the detailed rings, which draw those same plants: xz, radius. The tier is
+   * packed into aRand.y (+10 for far plants): the crop shader is at the 16 vertex-attribute limit.
+   */
+  uInner: THREE.IUniform<THREE.Vector3>;
 }
 
 const DECL = /* glsl */ `
@@ -53,6 +58,7 @@ uniform float uStiff;
 uniform vec2 uPatchCenter;
 uniform float uFadeStart;
 uniform float uFadeEnd;
+uniform vec3 uInner;
 attribute vec4 aRand;
 attribute vec3 aColor2;
 attribute float aPart;
@@ -96,11 +102,14 @@ transformed.y *= hs;
 transformed.xz *= mix(0.35, 1.0, sqrt(max(uScale, 0.0))) * (0.85 + 0.3 * aRand.x);
 float d = distance(origin.xz, uPatchCenter);
 float keep = step(aRand.z, 1.0 - smoothstep(uFadeStart, uFadeEnd, d));
+float tier = step(9.5, aRand.y);
+float rndY = fract(aRand.y);
+keep *= 1.0 - tier * step(distance(origin.xz, uInner.xy), uInner.z);
 transformed *= step(0.01, uPresence) * keep;
 // Wind: taller parts of taller plants move more; stiff crops (banana, castor) less.
 float gust = gustAt(origin.xz);
 float weight = aT * aT * (1.0 - uStiff) * clamp(hs * 1.2, 0.15, 2.0);
-float flutter = sin(uTime * 6.0 + aRand.y * 40.0 + transformed.y * 7.0) * 0.03 * step(0.5, aPart);
+float flutter = sin(uTime * 6.0 + rndY * 40.0 + transformed.y * 7.0) * 0.03 * step(0.5, aPart);
 float amount = (uWind * (0.25 + 0.85 * gust) + 0.02 + flutter * uWind) * weight;
 vec3 localDir = normalize(transpose(mat3(instanceMatrix)) * vec3(uWindDir.x, 0.0, uWindDir.y) + vec3(1e-5));
 transformed.xz += localDir.xz * amount * 0.45;
@@ -108,7 +117,7 @@ transformed.y -= amount * amount * 0.15;
 vPart = aPart;
 vOrder = aOrder;
 vT = aT;
-vRnd = aRand.y;
+vRnd = rndY;
 vColor2 = aColor2;
 vLeaf = aLeaf;
 `;
@@ -127,9 +136,19 @@ varying float vT;
 varying float vRnd;
 varying vec3 vColor2;
 varying vec3 vLeaf;
+float leafHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float leafNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(leafHash(i), leafHash(i + vec2(1, 0)), f.x), mix(leafHash(i + vec2(0, 1)), leafHash(i + vec2(1, 1)), f.x), f.y);
+}
+// Relief of the leaf surface (veins sunk into the blade), used for bump.
+float leafRelief;
 `;
 
 const COLOR = /* glsl */ `
+leafRelief = 0.0;
 vec3 base = vColor.rgb;
 vec3 col;
 if (vPart < 0.5) {
@@ -151,7 +170,17 @@ if (vPart < 0.5) {
     col *= 1.0 - 0.2 * clamp(vein, 0.0, 1.0);
     // Blade between veins is slightly fuller in colour; the margin is a touch lighter.
     col *= 0.94 + 0.1 * ax;
+    leafRelief = -clamp(vein, 0.0, 1.0);
   }
+  if (vLeaf.z > 1.5) leafRelief = -(1.0 - smoothstep(0.0, 0.16, ax)) - 0.3 * abs(sin(vLeaf.x * 14.0));
+  // Living tissue is never one flat colour: cell-scale mottling, a few blemishes, and a paler
+  // matte underside (stomata side) against the darker, waxier upper surface.
+  vec2 lp = vLeaf.xy * vec2(9.0, 22.0) + vRnd * 13.0;
+  float mottle = leafNoise(lp) * 0.6 + leafNoise(lp * 3.1) * 0.4;
+  col *= 0.9 + 0.2 * mottle;
+  float blemish = smoothstep(0.82, 0.9, leafNoise(lp * 0.55 + 4.0)) * (1.0 - dead);
+  col = mix(col, col * vec3(1.15, 1.05, 0.6), blemish * 0.5);
+  if (!gl_FrontFacing) col = mix(col, col * 1.18 + vec3(0.03, 0.04, 0.02), 0.7);
 } else if (vPart < 2.5) {
   col = base;
 } else if (vPart < 3.5) {
@@ -164,6 +193,8 @@ diffuseColor.rgb = col * mix(1.0, 0.8, uWet);
 
 const ROUGH = /* glsl */ `
 #include <roughnessmap_fragment>
+// Waxy cuticle: the upper side of a leaf has a soft sheen, the underside is matte.
+if (vPart > 0.5 && vPart < 1.5) roughnessFactor = gl_FrontFacing ? 0.42 + 0.12 * vRnd : 0.75;
 roughnessFactor = mix(roughnessFactor, 0.25, uWet);
 // Glossy fruit (brinjal, tomato, chilli) and waxy pods.
 if (vPart > 2.5 && vPart < 3.5) roughnessFactor = min(roughnessFactor, 0.32);
@@ -180,6 +211,21 @@ if (vPart > 0.5 && vPart < 2.5) {
 }
 #endif
 #include <opaque_fragment>
+`;
+
+/** Vein relief as a bump, from screen-space derivatives of the leaf's own relief value. */
+const LEAF_BUMP = /* glsl */ `
+#include <normal_fragment_maps>
+if (vPart > 0.5 && vPart < 1.5) {
+  float h = leafRelief * 0.0012;
+  vec3 dpdx = dFdx(-vViewPosition);
+  vec3 dpdy = dFdy(-vViewPosition);
+  vec3 r1 = cross(dpdy, normal);
+  vec3 r2 = cross(normal, dpdx);
+  float det = dot(dpdx, r1);
+  vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+  normal = normalize(abs(det) * normal - grad);
+}
 `;
 
 const SOFT_NORMAL = /* glsl */ `
@@ -201,6 +247,7 @@ function patchShader(material: THREE.Material, uniforms: Record<string, THREE.IU
         .replace('#include <common>', `#include <common>\n${FRAG_DECL}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR}`)
         .replace('#include <roughnessmap_fragment>', ROUGH)
+        .replace('#include <normal_fragment_maps>', LEAF_BUMP)
         .replace('#include <opaque_fragment>', TRANSLUCENT);
     }
   };
@@ -231,6 +278,7 @@ export function createCropMaterials(wind: WindUniforms) {
     uPatchCenter: { value: new THREE.Vector2(0, 0) },
     uFadeStart: { value: 1e6 },
     uFadeEnd: { value: 2e6 },
+    uInner: { value: new THREE.Vector3(0, 0, -1) },
   };
   const all = { ...wind, ...uniforms } as unknown as Record<string, THREE.IUniform>;
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.6, metalness: 0 });

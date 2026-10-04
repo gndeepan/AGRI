@@ -1,10 +1,10 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { hillsAround, nearestPointInside, type Hill } from '../fieldShape';
+import { HILL_SPACING_M, hillsAround, nearestPointInside, ROW_SPACING_M, type Hill } from '../fieldShape';
 import { MAX_TILLERS, type GrowthParams } from '../growth';
 import { damp, sceneTime, useSceneSettings } from '../quality';
-import { createCanopyGeometry, createCanopyMaterial } from './canopyMaterial';
+import { CANOPY_RENDER_ORDER, createCanopyGeometry, createCanopyMaterial } from './canopyMaterial';
 import { lodFor, useField } from './FieldContext';
 import { createBladeMaterials, createPanicleMaterials, setSrgb } from './plantMaterials';
 import { createClumpGeometry, createPanicleGeometry } from './riceGeometry';
@@ -23,8 +23,9 @@ interface CropProps {
 const frac = (v: number) => v - Math.floor(v);
 
 /** An InstancedMesh with a fixed capacity whose instances are rewritten when the patch moves. */
-function makeInstanced(geometry: THREE.BufferGeometry, material: THREE.Material, depth: THREE.Material, capacity: number) {
+function makeInstanced(geometry: THREE.BufferGeometry, material: THREE.Material, depth: THREE.Material, capacity: number, tier = 0) {
   const geo = geometry.clone();
+  geo.setAttribute('aTier', new THREE.Float32BufferAttribute(new Float32Array(geo.getAttribute('position').count).fill(tier), 1));
   const rand = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, capacity) * 4), 4);
   rand.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('aRand', rand);
@@ -70,6 +71,11 @@ export function Crop({ growth, windStrength, windDirection, wet, anthesis }: Cro
 
   const [patch, setPatch] = useState<[number, number]>(() => nearestPointInside(shape, shape.center[0], shape.center[1]));
   useEffect(() => setPatch(nearestPointInside(shape, shape.center[0], shape.center[1])), [shape]);
+  // The far tier follows the camera more coarsely (it is large and costly to rebuild).
+  const [farPatch, setFarPatch] = useState<[number, number]>(() => nearestPointInside(shape, shape.center[0], shape.center[1]));
+  useEffect(() => setFarPatch(nearestPointInside(shape, shape.center[0], shape.center[1])), [shape]);
+  // Radius the far budget covers at the transplanting density, plus the detailed rings it surrounds.
+  const rFar = useMemo(() => Math.sqrt((lod.budget2 * ROW_SPACING_M * HILL_SPACING_M) / Math.PI + lod.r1 * lod.r1), [lod]);
 
   const leafTex = useMemo(() => createLeafTexture(), []);
   const blades = useMemo(() => createBladeMaterials(wind, leafTex), [wind, leafTex]);
@@ -82,13 +88,17 @@ export function Crop({ growth, windStrength, windDirection, wet, anthesis }: Cro
     const clump1 = createClumpGeometry({ blades: high ? 7 : 5, segments: high ? 4 : 3, folded: false, seed: 8 });
     const panD = createPanicleGeometry({ panicles: 4, branches: 6, grainsPerBranch: 4, seed: 11 });
     const panS = createPanicleGeometry({ panicles: 3, branches: 0, grainsPerBranch: high ? 8 : 6, seed: 12 });
+    const clump2 = createClumpGeometry({ blades: 4, segments: 2, folded: false, seed: 9 });
+    const panF = createPanicleGeometry({ panicles: 1, branches: 0, grainsPerBranch: 3, seed: 13 });
     const out = {
       blade0: makeInstanced(clump0, blades.material, blades.depth, lod.budget0),
       blade1: makeInstanced(clump1, blades.material, blades.depth, lod.budget1),
       panD: makeInstanced(panD, panicles.material, panicles.depth, lod.panicleR > 0 ? lod.budget0 : 1),
       panS: makeInstanced(panS, panicles.material, panicles.depth, lod.budget0 + lod.budget1),
+      blade2: makeInstanced(clump2, blades.material, blades.depth, lod.budget2, 1),
+      panF: makeInstanced(panF, panicles.material, panicles.depth, lod.budget2, 1),
     };
-    [clump0, clump1, panD, panS].forEach((g) => g.dispose());
+    [clump0, clump1, panD, panS, clump2, panF].forEach((g) => g.dispose());
     out.blade0.mesh.castShadow = high;
     out.blade0.mesh.receiveShadow = high;
     out.blade1.mesh.receiveShadow = high;
@@ -107,13 +117,22 @@ export function Crop({ growth, windStrength, windDirection, wet, anthesis }: Cro
     fill(meshes.panD, detailed);
     fill(meshes.panS, simple);
     focus.set(patch[0], patch[1]);
+    // Far-tier hills inside the detailed rings are drawn by those rings (same hills, same places).
+    for (const u of [blades.uniforms, panicles.uniforms]) u.uInner.value.set(patch[0], patch[1], lod.r1);
+  }, [shape, patch, lod, meshes, blades, panicles, focus]);
+
+  useEffect(() => {
+    const far = hillsAround(shape, farPatch, 0, rFar, lod.budget2);
+    fill(meshes.blade2, far);
+    fill(meshes.panF, far);
     for (const u of [blades.uniforms, panicles.uniforms, canopy.uniforms]) {
-      u.uPatchCenter.value.set(patch[0], patch[1]);
-      // A wide cross-fade hides the seam between real plants and the canopy surface.
-      u.uFadeStart.value = lod.r1 * 0.6;
-      u.uFadeEnd.value = lod.r1 * 0.98;
+      u.uPatchCenter.value.set(farPatch[0], farPatch[1]);
+      // A wide, gradual cross-fade (half the radius) so real plants thin out into the canopy surface
+    // with no visible edge.
+      u.uFadeStart.value = rFar * 0.5;
+      u.uFadeEnd.value = rFar * 0.98;
     }
-  }, [shape, patch, lod, meshes, blades, panicles, canopy, focus]);
+  }, [shape, farPatch, rFar, lod, meshes, blades, panicles, canopy]);
 
   useEffect(() => {
     canopy.uniforms.uRowDir.value.set(Math.cos(shape.rowAngle), Math.sin(shape.rowAngle));
@@ -154,6 +173,8 @@ export function Crop({ growth, windStrength, windDirection, wet, anthesis }: Cro
       const ahead = Math.min(dist, lod.r1 * 0.45 + Math.max(0, cam.y) * 0.4);
       const want = nearestPointInside(shape, cam.x + (dx / dist) * ahead, cam.z + (dz / dist) * ahead, lod.r0 * 0.4);
       if (Math.hypot(want[0] - patch[0], want[1] - patch[1]) > lod.r1 * 0.2) setPatch(want);
+      // Keep the detailed rings well inside the far tier (they must not reach its fade).
+      if (Math.hypot(want[0] - farPatch[0], want[1] - farPatch[1]) > rFar * 0.25) setFarPatch(want);
     }
 
     const b = blades.uniforms;
@@ -177,6 +198,7 @@ export function Crop({ growth, windStrength, windDirection, wet, anthesis }: Cro
     const showPanicles = p.uEmerge.value > 0.02 && p.uPresence.value > 0.01;
     meshes.panD.mesh.visible = showPanicles;
     meshes.panS.mesh.visible = showPanicles;
+    meshes.panF.mesh.visible = showPanicles;
 
     const c = canopy.uniforms;
     const h = b.uHeight.value * (1 - 0.15 * b.uStubble.value);
@@ -198,7 +220,9 @@ export function Crop({ growth, windStrength, windDirection, wet, anthesis }: Cro
       <primitive object={meshes.blade1.mesh} />
       <primitive object={meshes.panD.mesh} />
       <primitive object={meshes.panS.mesh} />
-      <mesh geometry={canopyGeo} material={canopy.material} receiveShadow={high} />
+      <primitive object={meshes.blade2.mesh} />
+      <primitive object={meshes.panF.mesh} />
+      <mesh geometry={canopyGeo} material={canopy.material} receiveShadow={high} renderOrder={CANOPY_RENDER_ORDER} />
     </group>
   );
 }

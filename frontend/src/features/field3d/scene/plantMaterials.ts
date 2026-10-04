@@ -33,7 +33,10 @@ uniform vec2 uWindDir;
 uniform vec2 uPatchCenter;
 uniform float uFadeStart;
 uniform float uFadeEnd;
+// Far-tier plants (aTier = 1) hide inside the detailed rings, which draw those same hills: centre xz, radius.
+uniform vec3 uInner;
 attribute vec4 aRand;
+attribute float aTier;
 attribute float aBlade;
 attribute float aT;
 varying float vT;
@@ -56,7 +59,8 @@ vec3 windSway(vec3 p, float weight, vec3 origin) {
 float patchKeep(vec3 origin) {
   float d = distance(origin.xz, uPatchCenter);
   float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, d);
-  return step(aRand.z, fade);
+  float inner = aTier * step(distance(origin.xz, uInner.xy), uInner.z);
+  return step(aRand.z, fade) * (1.0 - inner);
 }
 `;
 
@@ -127,6 +131,9 @@ float dead = smoothstep(1.0 - sen, 1.0 - sen + 0.25, vBlade + vRnd * 0.15) * smo
 leaf = mix(leaf, vec3(0.74, 0.6, 0.32) * (0.8 + 0.35 * vRnd), dead * step(0.01, uSenescence));
 // Leaf sheaths low in the clump sit in shadow and are paler.
 leaf *= mix(0.45, 1.0, smoothstep(0.0, 0.5, vT));
+// Fine lengthwise mottling and a paler, matte underside: a rice blade is not one flat green.
+leaf *= 0.92 + 0.14 * fract(sin(floor(vT * 26.0) * 12.9898 + vRnd * 78.233) * 43758.5453);
+if (!gl_FrontFacing) leaf = mix(leaf, leaf * 1.15 + vec3(0.03, 0.04, 0.02), 0.6);
 diffuseColor.rgb *= leaf * mix(1.0, 0.8, uWet);
 `;
 
@@ -139,6 +146,8 @@ diffuseColor.rgb *= grain * mix(1.0, 0.82, uWet);
 
 const WET_ROUGHNESS = /* glsl */ `
 #include <roughnessmap_fragment>
+// Waxy upper surface catches a soft highlight; the underside stays matte.
+roughnessFactor = gl_FrontFacing ? roughnessFactor * 0.82 : min(1.0, roughnessFactor * 1.35);
 roughnessFactor = mix(roughnessFactor, 0.22, uWet);
 `;
 
@@ -158,6 +167,7 @@ export interface PatchUniforms {
   uPatchCenter: THREE.IUniform<THREE.Vector2>;
   uFadeStart: THREE.IUniform<number>;
   uFadeEnd: THREE.IUniform<number>;
+  uInner: THREE.IUniform<THREE.Vector3>;
 }
 
 export interface BladeUniforms extends PatchUniforms {
@@ -222,6 +232,7 @@ function patchUniforms(): PatchUniforms {
     uPatchCenter: { value: new THREE.Vector2(0, 0) },
     uFadeStart: { value: 1e6 },
     uFadeEnd: { value: 2e6 },
+    uInner: { value: new THREE.Vector3(0, 0, -1) },
   };
 }
 

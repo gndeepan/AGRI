@@ -7,6 +7,8 @@ import { useField } from '../FieldContext';
 import { applyRig, BirdRig } from './BirdRig';
 import { drongoPose, mynaPose, parakeetParams, parakeetPose, type BirdPose } from './birdBehavior';
 import { buildPathRing, samplePath } from './farmerPath';
+import { buildColored } from './geo';
+import { createOrganicMaterial } from './organicMaterial';
 import { useDevFrame } from './useDevFrame';
 
 function useSlots(n: number) {
@@ -60,8 +62,9 @@ export function Drongo({ seed }: { seed: number }) {
     const q = samplePath(ring, ring.length * (0.15 + ((seed * 0.37) % 0.6)));
     return { x: q.x, z: q.z, top: 1.45, yaw: Math.atan2(q.inward[0], q.inward[1]) };
   }, [shape, seed]);
-  const geo = useMemo(() => new THREE.CylinderGeometry(0.035, 0.045, 1.45, 6).translate(0, 0.725, 0), []);
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#6a5236', roughness: 0.95 }), []);
+  // A weathered wooden post, slightly irregular.
+  const geo = useMemo(() => buildColored([[new THREE.CylinderGeometry(0.035, 0.045, 1.45, 9, 4).translate(0, 0.725, 0), '#6a5236']], 'wood'), []);
+  const mat = useMemo(() => createOrganicMaterial(), []);
   useEffect(() => () => { geo.dispose(); mat.dispose(); }, [geo, mat]);
   const slot = useSlots(1)[0]!;
   const group = useRef<THREE.Group>(null);

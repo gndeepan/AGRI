@@ -4,7 +4,30 @@ import * as THREE from 'three';
 import { mulberry32 } from '../prng';
 import { sceneTime, useSceneSettings } from '../quality';
 import { useField } from './FieldContext';
+import { at, buildColored, ellipsoid, limb } from './wildlife/geo';
 import { butterflyWingTexture } from './wildlife/insectTextures';
+import { createOrganicMaterial } from './wildlife/organicMaterial';
+
+/** Insect body along +x (the flight direction): head with compound eyes, thorax, segmented abdomen. */
+function insectBody(kind: 'dragonfly' | 'butterfly'): THREE.BufferGeometry {
+  if (kind === 'dragonfly') {
+    const segs: Array<[THREE.BufferGeometry, string]> = Array.from({ length: 7 }, (_, i) => [
+      at(limb(0.0042 - i * 0.0002, 0.0038 - i * 0.0002, 0.013, 6).rotateZ(Math.PI / 2), -0.006 - i * 0.0128, 0, 0),
+      i % 2 ? '#1f5d78' : '#2a7a94',
+    ]);
+    return buildColored([
+      [at(ellipsoid(0.0075, 0.0068, 0.007, 8, 6), 0.012, 0.001, 0), '#2a6f5a'], // thorax
+      [at(ellipsoid(0.0055, 0.006, 0.0062, 8, 6), 0.022, 0.002, 0.0035), '#3d6f86', 'eye'],
+      [at(ellipsoid(0.0055, 0.006, 0.0062, 8, 6), 0.022, 0.002, -0.0035), '#3d6f86', 'eye'],
+      ...segs,
+    ], 'horn');
+  }
+  return buildColored([
+    [at(ellipsoid(0.005, 0.0045, 0.0045, 8, 6), 0.012, 0, 0), '#2b2018'],
+    [at(ellipsoid(0.0035, 0.0035, 0.0035, 6, 5), 0.019, 0.001, 0), '#1e1712', 'eye'],
+    [at(ellipsoid(0.013, 0.0032, 0.0032, 8, 6), -0.006, -0.001, 0), '#3a2a1a'],
+  ], 'hair');
+}
 
 interface WildlifeProps {
   /** 0..1 — how active daytime wildlife is (daylight × fair weather). */
@@ -60,19 +83,21 @@ function Flyers({ kind, count, canopyHeight, seed }: { kind: 'dragonfly' | 'butt
   // Butterflies get a procedural wing pattern (crow / lime / grass-yellow by seed); dragonfly wings stay glassy.
   const wingTex = useMemo(() => (kind === 'butterfly' ? butterflyWingTexture(seed % 3 === 0 ? 'crow' : seed % 3 === 1 ? 'lime' : 'grass') : null), [kind, seed]);
   const wingMat = useMemo(
-    () => new THREE.MeshStandardMaterial({
-      color: kind === 'dragonfly' ? '#cfe6ff' : '#ffffff',
-      map: wingTex,
-      alphaTest: wingTex ? 0.4 : 0,
-      transparent: kind === 'dragonfly',
-      opacity: kind === 'dragonfly' ? 0.45 : 1,
-      side: THREE.DoubleSide,
-      roughness: 0.3,
-    }),
+    () => (kind === 'dragonfly'
+      // Clear membrane with a thin-film shimmer.
+      ? new THREE.MeshPhysicalMaterial({
+        color: '#e4f0ff', transparent: true, opacity: 0.32, side: THREE.DoubleSide, roughness: 0.12,
+        iridescence: 1, iridescenceIOR: 1.35, depthWrite: false,
+      })
+      // Scaled wings are matte and velvety.
+      : new THREE.MeshPhysicalMaterial({
+        map: wingTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.7, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color('#ffffff'),
+      })),
     [kind, wingTex],
   );
-  const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({ color: kind === 'dragonfly' ? '#2a6f8f' : '#3a2a1a' }), [kind]);
-  useEffect(() => () => { wing.dispose(); wingMat.dispose(); bodyMat.dispose(); wingTex?.dispose(); }, [wing, wingMat, bodyMat, wingTex]);
+  const body = useMemo(() => insectBody(kind), [kind]);
+  const bodyMat = useMemo(() => createOrganicMaterial(), []);
+  useEffect(() => () => { wing.dispose(); wingMat.dispose(); body.dispose(); bodyMat.dispose(); wingTex?.dispose(); }, [wing, wingMat, body, bodyMat, wingTex]);
 
   useFrame(({ clock }) => {
     const t = sceneTime(clock.elapsedTime, reducedMotion);
@@ -100,9 +125,7 @@ function Flyers({ kind, count, canopyHeight, seed }: { kind: 'dragonfly' | 'butt
     <group>
       {params.map((_, i) => (
         <group key={i} ref={(el) => { refs.current[i] = el; }}>
-          <mesh material={bodyMat} rotation-z={Math.PI / 2}>
-            <capsuleGeometry args={[0.008, kind === 'dragonfly' ? 0.1 : 0.03, 2, 4]} />
-          </mesh>
+          <mesh geometry={body} material={bodyMat} />
           <mesh geometry={wing} material={wingMat} rotation-y={Math.PI / 2} />
           <mesh geometry={wing} material={wingMat} rotation-y={-Math.PI / 2} />
         </group>

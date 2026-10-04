@@ -1,7 +1,8 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { lightProbe, skyPalette, type RGB } from '@/features/sky/palette';
+import { MOON_GLSL } from '@/features/sky/moonGlsl';
+import { directionENU, lightProbe, skyPalette, type RGB } from '@/features/sky/palette';
 import type { SkyParams } from '@/features/sky/params';
 import { createSkyRendererForContext, type SkyRenderer, type Vec3 } from '@/features/sky/renderer';
 import { weatherAudio } from '@/features/sky/thunder';
@@ -37,6 +38,12 @@ const MAX_VIEW_PIXELS = 600_000;
 const toScene = (v: RGB | Vec3): THREE.Vector3 => new THREE.Vector3(v[0], v[1], -v[2]);
 const skyVec = (x: number, y: number, z: number): Vec3 => [x, y, -z];
 const tmpColor = new THREE.Color();
+/** Moonless night: soft skyglow from high in the south-east. */
+const NIGHT_KEY_DIR = new THREE.Vector3(0.35, 0.85, 0.4).normalize();
+/** Minimum key (moon / skyglow) and hemisphere intensity at full night. */
+const NIGHT_KEY_FLOOR = 1.5;
+const NIGHT_AMBIENT_FLOOR = 1.05;
+const NIGHT_FOG = new THREE.Color().setRGB(0.1, 0.13, 0.2, THREE.SRGBColorSpace);
 
 const BACKGROUND_VERT = /* glsl */ `
 varying vec2 vNdc;
@@ -53,16 +60,45 @@ uniform float uHasCube;
 uniform mat4 uInvProj;
 uniform mat4 uCamWorld;
 uniform float uGain;
+// The moon, drawn here at full resolution (the sky texture is rendered smaller and would blur it).
+// Sky space: x east, y up, z north.
+uniform vec3 uMoonDir;
+uniform vec3 uSunDir;
+uniform float uMoonPhase;
+uniform float uMoonVis;
 varying vec2 vNdc;
+${MOON_GLSL}
 vec3 toLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
 void main() {
   vec3 c;
+  vec4 v = uInvProj * vec4(vNdc, 1.0, 1.0);
+  vec3 d = normalize((uCamWorld * vec4(normalize(v.xyz / v.w), 0.0)).xyz);
   if (uMain > 0.5) {
-    c = texture2D(uView, vNdc * 0.5 + 0.5).rgb;
+    vec4 sky = texture2D(uView, vNdc * 0.5 + 0.5);
+    c = sky.rgb;
+    // Alpha of the sky texture = how much of the moon shows through cloud, rain and fog there.
+    vec3 m = uMoonDir;
+    vec3 dir = vec3(d.x, d.y, -d.z);
+    float vis = uMoonVis * sky.a;
+    if (vis > 0.001 && m.y > -0.04 && dot(dir, m) > 0.0) {
+      // East is to the viewer's right (looking at the moon from the ground), lunar north up.
+      vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), m));
+      vec3 up = cross(m, right);
+      vec2 l = vec2(dot(dir, right), dot(dir, up)) / 0.048;
+      float r = length(l);
+      if (r < 1.05) {
+        float aa = max(fwidth(r), 1e-3);
+        float disc = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r);
+        float lit;
+        // Shade the antialiased rim with the edge of the disc.
+        vec2 lc = r > 0.999 ? l * (0.999 / r) : l;
+        vec3 surf = moonSurface(lc, right, up, m, uSunDir, uMoonPhase, lit);
+        float cover = disc * lit * vis;
+        c = c * (1.0 - cover) + surf * 1.15 * disc * vis;
+      }
+    }
   } else {
     // Mirrored/secondary cameras (water reflections) look up the sky cube by direction.
-    vec4 v = uInvProj * vec4(vNdc, 1.0, 1.0);
-    vec3 d = normalize((uCamWorld * vec4(normalize(v.xyz / v.w), 0.0)).xyz);
     c = uHasCube > 0.5 ? textureCube(uCube, vec3(d.x, d.y, -d.z)).rgb : vec3(0.5, 0.6, 0.7);
     c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 0.65);
   }
@@ -125,6 +161,10 @@ export function Atmosphere({ sky, soundEnabled }: AtmosphereProps) {
         uInvProj: { value: new THREE.Matrix4() },
         uCamWorld: { value: new THREE.Matrix4() },
         uGain: { value: 1.1 },
+        uMoonDir: { value: new THREE.Vector3(0, -1, 0) },
+        uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+        uMoonPhase: { value: 0.5 },
+        uMoonVis: { value: 0 },
       },
       vertexShader: BACKGROUND_VERT,
       fragmentShader: BACKGROUND_FRAG,
@@ -264,6 +304,8 @@ export function Atmosphere({ sky, soundEnabled }: AtmosphereProps) {
         screenFlash: false,
         // Streaks come from the 3D rain (with depth); the sky keeps its rain veils and darkening.
         rain: false,
+        // The background quad draws the moon at full resolution over this smaller sky image.
+        moonOverlay: true,
         view: {
           right: skyVec(e[0], e[1], e[2]),
           up: skyVec(e[4], e[5], e[6]),
@@ -296,21 +338,38 @@ export function Atmosphere({ sky, soundEnabled }: AtmosphereProps) {
       }
     }
 
+    {
+      const u = res.background.uniforms;
+      (u.uMoonDir.value as THREE.Vector3).set(...directionENU(p.moonAzimuth, p.moonElevation));
+      (u.uSunDir.value as THREE.Vector3).set(...directionENU(p.sunAzimuth, p.sunElevation));
+      u.uMoonPhase.value = p.moonPhase;
+      // Same night factor as the sky shader: the moon fades in at dusk and behind overcast or fog.
+      const night = 1 - pal.daylight;
+      u.uMoonVis.value = THREE.MathUtils.smoothstep(night, 0.35, 0.95) * (1 - p.overcast * 0.9) * (1 - p.fog * 0.8);
+    }
+
     // Lighting from the same sky.
     const k = reducedMotion ? 1 : 1 - Math.exp(-3 * Math.min(dt, 0.1));
     const night = pal.daylight < 0.15;
+    // 0 by day, 1 at full night, eased through twilight. Real eyes adapt to moonlight and village
+    // skyglow; without a floor the crop disappears into black after sunset.
+    const nightness = 1 - THREE.MathUtils.smoothstep(pal.daylight, 0.05, 0.35);
     // Under a rain deck the ground sees far less light than the bright grey cloud base suggests.
     const dim = 1 - 0.45 * pal.gloom;
-    scene.environmentIntensity = (0.32 + 0.33 * pal.daylight) * dim;
+    scene.environmentIntensity = Math.max((0.32 + 0.33 * pal.daylight) * dim, 0.45 * nightness);
     if (keyLight.current) {
-      const dir = toScene(probe.keyDirection).normalize();
+      // No moon: light the field from high in the sky (skyglow) rather than from below the horizon.
+      const dir = night && p.moonElevation <= 0 ? NIGHT_KEY_DIR.clone() : toScene(probe.keyDirection).normalize();
       keyLight.current.position.set(focus.x + dir.x * 40, Math.max(dir.y, 0.05) * 40, focus.y + dir.z * 40);
       keyLight.current.target.position.set(focus.x, 0, focus.y);
       keyLight.current.target.updateMatrixWorld();
       tmpColor.setRGB(...probe.keyColor, THREE.SRGBColorSpace);
       keyLight.current.color.lerp(tmpColor, k);
       // Storm afternoons are dim, not black: keep a daylight floor so the crop stays readable.
-      const target = night ? probe.keyIntensity * 9 : Math.max(probe.keyIntensity * 3.1 * dim, 0.55 * pal.daylight);
+      const target = Math.max(
+        night ? probe.keyIntensity * 9 : Math.max(probe.keyIntensity * 3.1 * dim, 0.55 * pal.daylight),
+        NIGHT_KEY_FLOOR * nightness * (0.75 + 0.25 * dim),
+      );
       keyLight.current.intensity += (target - keyLight.current.intensity) * k;
       keyLight.current.castShadow = high && pal.daylight > 0.05;
     }
@@ -319,13 +378,13 @@ export function Atmosphere({ sky, soundEnabled }: AtmosphereProps) {
       const sky = pal.zenith.map((v, i) => v * 0.6 + pal.horizon[i] * 0.4) as RGB;
       const lum = sky[0] * 0.2126 + sky[1] * 0.7152 + sky[2] * 0.0722;
       const norm = Math.max(1, 0.6 / Math.max(lum, 0.02));
-      if (night) tmpColor.setRGB(0.42, 0.5, 0.72, THREE.SRGBColorSpace);
+      if (night) tmpColor.setRGB(0.5, 0.6, 0.82, THREE.SRGBColorSpace);
       else tmpColor.setRGB(sky[0] * norm, sky[1] * norm, sky[2] * norm, THREE.SRGBColorSpace);
       hemi.current.color.lerp(tmpColor, k);
-      tmpColor.setRGB(0.3, 0.26, 0.16, THREE.SRGBColorSpace).multiplyScalar(0.2 + 0.8 * pal.daylight);
+      tmpColor.setRGB(0.3, 0.26, 0.16, THREE.SRGBColorSpace).multiplyScalar(Math.max(0.2 + 0.8 * pal.daylight, 0.45 * nightness));
       hemi.current.groundColor.lerp(tmpColor, k);
-      // Night: starlight and village skyglow keep silhouettes readable even without a moon.
-      const ambient = Math.max(probe.ambientIntensity * 1.1 * (0.6 + 0.4 * dim), 0.5 * pal.daylight, 0.22);
+      // Night: starlight and village skyglow keep the crop readable even without a moon.
+      const ambient = Math.max(probe.ambientIntensity * 1.1 * (0.6 + 0.4 * dim), 0.5 * pal.daylight, 0.22, NIGHT_AMBIENT_FLOOR * nightness);
       hemi.current.intensity += (ambient - hemi.current.intensity) * k;
     }
     if (flashLight.current) flashLight.current.intensity = reducedMotion ? 0 : flash * 3.5;
@@ -333,6 +392,8 @@ export function Atmosphere({ sky, soundEnabled }: AtmosphereProps) {
       // Fog takes the horizon's colour (already darkened by rain/storm); real fog greys it further.
       const fogRgb = pal.horizon.map((h, i) => h + (pal.fogColor[i] * (1 - pal.gloom * 0.6) - h) * Math.min(1, p.fog * 0.8)) as RGB;
       tmpColor.setRGB(...fogRgb, THREE.SRGBColorSpace);
+      // At night the air glows faintly blue-grey (skyglow); a black fog would swallow the field.
+      tmpColor.lerp(NIGHT_FOG, nightness * 0.7);
       scene.fog.color.lerp(tmpColor, k);
       const haze = Math.min(1, p.cloudLow * 0.25 + p.overcast * 0.2 + p.rainIntensity * 0.75 + p.mist * 0.5 + p.fog);
       scene.fog.far = (span * 6 + 450) * (1 - haze * 0.8);

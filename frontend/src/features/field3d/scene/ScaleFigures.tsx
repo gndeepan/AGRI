@@ -1,57 +1,27 @@
+import { useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { useSceneSettings } from '../quality';
 import { useField } from './FieldContext';
 import { BUND_H } from './Ground';
-
-/** Merge primitives into one vertex-coloured geometry. */
-function build(parts: Array<[THREE.BufferGeometry, string]>): THREE.BufferGeometry {
-  const list = parts.map(([g, hex]) => {
-    const n = g.index ? g.toNonIndexed() : g;
-    n.deleteAttribute('uv');
-    const c = new THREE.Color(hex);
-    const count = n.getAttribute('position').count;
-    const col = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) col.set([c.r, c.g, c.b], i * 3);
-    n.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    return n;
-  });
-  const merged = mergeGeometries(list, false) ?? new THREE.BufferGeometry();
-  parts.forEach(([g]) => g.dispose());
-  list.forEach((g) => g.dispose());
-  merged.computeVertexNormals();
-  return merged;
-}
+import { scarecrowGeometry } from './scarecrow';
+import { buildColored, type ColoredPart } from './wildlife/geo';
+import { createOrganicMaterial } from './wildlife/organicMaterial';
 
 /** A 1.7 m farmer in a veshti with a towel turban — the human scale reference. */
 function farmerGeometry(): THREE.BufferGeometry {
   const t = (g: THREE.BufferGeometry, x: number, y: number, z: number) => g.translate(x, y, z);
-  return build([
-    [t(new THREE.CylinderGeometry(0.17, 0.24, 0.62, 10), 0, 0.55, 0), '#efe9d8'], // veshti
-    [t(new THREE.CylinderGeometry(0.04, 0.045, 0.3, 6), 0.08, 0.12, 0), '#6b4a33'],
-    [t(new THREE.CylinderGeometry(0.04, 0.045, 0.3, 6), -0.08, 0.12, 0), '#6b4a33'],
-    [t(new THREE.CylinderGeometry(0.16, 0.18, 0.52, 10), 0, 1.12, 0), '#3f6f8f'], // shirt
-    [t(new THREE.CylinderGeometry(0.045, 0.05, 0.55, 6).rotateZ(0.18), 0.22, 1.1, 0), '#6b4a33'],
-    [t(new THREE.CylinderGeometry(0.045, 0.05, 0.55, 6).rotateZ(-0.18), -0.22, 1.1, 0), '#6b4a33'],
-    [t(new THREE.SphereGeometry(0.11, 12, 10), 0, 1.5, 0), '#6b4a33'],
-    [t(new THREE.TorusGeometry(0.1, 0.035, 6, 12).rotateX(Math.PI / 2), 0, 1.58, 0), '#f2efe6'], // turban
-  ]);
-}
-
-/** Traditional scarecrow (sōlakkāṭṭu bommai): pole, cross-arm, straw body, clay-pot head. */
-function scarecrowGeometry(): THREE.BufferGeometry {
-  const t = (g: THREE.BufferGeometry, x: number, y: number, z: number) => g.translate(x, y, z);
-  return build([
-    [t(new THREE.CylinderGeometry(0.03, 0.035, 1.7, 6), 0, 0.85, 0), '#6a5236'],
-    [t(new THREE.CylinderGeometry(0.025, 0.025, 1.1, 6).rotateZ(Math.PI / 2), 0, 1.25, 0), '#6a5236'],
-    [t(new THREE.CylinderGeometry(0.16, 0.22, 0.6, 8), 0, 1.0, 0), '#b8975a'],
-    [t(new THREE.CylinderGeometry(0.06, 0.04, 0.45, 6).rotateZ(Math.PI / 2), 0.36, 1.25, 0), '#a23b2a'],
-    [t(new THREE.CylinderGeometry(0.06, 0.04, 0.45, 6).rotateZ(-Math.PI / 2), -0.36, 1.25, 0), '#a23b2a'],
-    [t(new THREE.SphereGeometry(0.15, 12, 10), 0, 1.55, 0), '#c9b28a'], // white-washed pot
-    [t(new THREE.SphereGeometry(0.025, 6, 6), 0.05, 1.58, 0.13), '#111111'],
-    [t(new THREE.SphereGeometry(0.025, 6, 6), -0.05, 1.58, 0.13), '#111111'],
-  ]);
+  const parts: ColoredPart[] = [
+    [t(new THREE.CylinderGeometry(0.17, 0.24, 0.62, 16), 0, 0.55, 0), '#efe9d8', 'cloth'], // veshti
+    [t(new THREE.CylinderGeometry(0.04, 0.045, 0.3, 10), 0.08, 0.12, 0), '#6b4a33'],
+    [t(new THREE.CylinderGeometry(0.04, 0.045, 0.3, 10), -0.08, 0.12, 0), '#6b4a33'],
+    [t(new THREE.CylinderGeometry(0.16, 0.18, 0.52, 16), 0, 1.12, 0), '#3f6f8f', 'cloth'], // shirt
+    [t(new THREE.CylinderGeometry(0.045, 0.05, 0.55, 10).rotateZ(0.18), 0.22, 1.1, 0), '#6b4a33'],
+    [t(new THREE.CylinderGeometry(0.045, 0.05, 0.55, 10).rotateZ(-0.18), -0.22, 1.1, 0), '#6b4a33'],
+    [t(new THREE.SphereGeometry(0.11, 18, 14), 0, 1.5, 0), '#6b4a33'],
+    [t(new THREE.TorusGeometry(0.1, 0.035, 10, 20).rotateX(Math.PI / 2), 0, 1.58, 0), '#f2efe6', 'cloth'], // turban
+  ];
+  return buildColored(parts, 'skin');
 }
 
 /** Point on the field's bund nearest to `near`, plus the outward normal there. */
@@ -78,7 +48,7 @@ export function ScaleFigures({ viewFrom }: { viewFrom: [number, number] }) {
   // The animated farmer (wildlife/Farmer) replaces this static one on the high tier.
   const { quality } = useSceneSettings();
   const geos = useMemo(() => ({ farmer: farmerGeometry(), scarecrow: scarecrowGeometry() }), []);
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), []);
+  const mat = useMemo(() => createOrganicMaterial({ side: THREE.DoubleSide }), []);
   useEffect(() => () => { geos.farmer.dispose(); geos.scarecrow.dispose(); mat.dispose(); }, [geos, mat]);
 
   const spots = useMemo(() => {
@@ -95,10 +65,28 @@ export function ScaleFigures({ viewFrom }: { viewFrom: [number, number] }) {
     };
   }, [shape, viewFrom]);
 
+  // Dev-only: __bhoomiFrameScarecrow(dist, height, azimuthDeg) puts the camera on the scarecrow.
+  const camera = useThree((st) => st.camera);
+  const controls = useThree((st) => st.controls) as unknown as { target: THREE.Vector3; update: () => void } | null;
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as Record<string, unknown>;
+    w.__bhoomiFrameScarecrow = (dist = 2.6, height = 1.3, az = 0) => {
+      if (!controls) return;
+      const a = spots.farmerYaw + Math.PI - 0.35 + (az * Math.PI) / 180;
+      const [x, , z] = spots.scarecrow;
+      camera.position.set(x + Math.sin(a) * dist, height, z + Math.cos(a) * dist);
+      controls.target.set(x, 1.2, z);
+      controls.update();
+    };
+    return () => { delete w.__bhoomiFrameScarecrow; };
+  }, [camera, controls, spots]);
+
   return (
     <group>
       {quality === 'low' && <mesh geometry={geos.farmer} material={mat} position={spots.farmer} rotation-y={spots.farmerYaw} castShadow />}
-      <mesh geometry={geos.scarecrow} material={mat} position={spots.scarecrow} rotation-y={spots.farmerYaw + 0.4} castShadow />
+      {/* Turned to face the viewer on the bund (the farmer faces into the field). */}
+      <mesh geometry={geos.scarecrow} material={mat} position={spots.scarecrow} rotation-y={spots.farmerYaw + Math.PI - 0.35} castShadow />
     </group>
   );
 }

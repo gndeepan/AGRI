@@ -5,6 +5,8 @@
  * drops-on-glass refraction, midpoint-displacement bolts).
  */
 
+import { MOON_GLSL } from './moonGlsl'
+
 const NOISE = /* glsl */ `
 float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -160,6 +162,9 @@ uniform vec3 uFwd, uRight, uUp;
 uniform float uTanHalfFov;
 uniform vec3 uSunDir, uMoonDir;
 uniform float uMoonPhase;
+// 1: a 3D scene draws the moon itself at full resolution; the sky leaves it out and writes the moon's
+// visibility through cloud, rain and fog to alpha.
+uniform float uMoonOverlay;
 uniform vec3 uZenith, uHorizon, uSunColor, uCloudLit, uCloudShadow, uFogColor;
 uniform float uSunVis, uDaylight;
 uniform vec3 uCloud;          // low, mid, high cover
@@ -172,6 +177,7 @@ uniform sampler2D uCumulus;   // half-res premultiplied cumulus buffer
 uniform float uCumulusW;      // 0..1 weight of the cumulus buffer (0 under stratus / rain)
 uniform vec2 uCumulusTexel;   // size of one cumulus-buffer texel in uv
 ${NOISE}
+${MOON_GLSL}
 
 // One flat cloud layer projected onto a horizontal plane at height h. Returns rgb + alpha.
 // lo/hi: noise thresholds for the cover; ripple: altocumulus mackerel pattern.
@@ -232,31 +238,31 @@ vec3 stars(vec3 dir, float moonGlare) {
   return col;
 }
 
-// Moon: lit by the real sun direction, so phase and the tilt of the terminator come out right.
-vec3 moon(vec3 dir, out float disc) {
+// Moon: real phase and lit side (moonGlsl.ts). disc: the whole moon (it hides the stars behind it);
+// litCover: the sunlit part, which replaces the sky; halo: the glow around it.
+vec3 moon(vec3 dir, out float disc, out float litCover, out vec3 halo) {
   disc = 0.0;
+  litCover = 0.0;
+  halo = vec3(0.0);
   float R = 0.048;
   vec3 m = uMoonDir;
-  if (m.y < -0.04) return vec3(0.0);
-  vec3 right = normalize(cross(m, vec3(0.0, 1.0, 0.0)));
-  vec3 up = cross(right, m);
+  if (m.y < -0.04 || dot(dir, m) < 0.0) return vec3(0.0);
+  // East is to the viewer's right (looking at the moon from the ground), lunar north up.
+  vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), m));
+  vec3 up = cross(m, right);
   vec2 l = vec2(dot(dir, right), dot(dir, up)) / R;
   float r = length(l);
   float illum = 1.0 - abs(uMoonPhase - 0.5) * 2.0;
-  vec3 halo = vec3(0.7, 0.78, 0.98) * (exp(-r * 0.55) * 0.16 + exp(-r * 0.12) * 0.05) * (0.25 + 0.75 * illum);
-  if (dot(dir, m) < 0.0) return vec3(0.0);
-  if (r > 1.0) return halo;
-  float z = sqrt(1.0 - r * r);
-  vec3 nrm = normalize(l.x * right + l.y * up - z * m);
-  float lit = smoothstep(-0.03, 0.14, dot(nrm, uSunDir));
-  // Maria (dark basalt plains) and a few bright ray craters.
-  float seas = smoothstep(0.42, 0.62, fbm(l * 1.7 + vec2(4.3, 1.7)));
-  float fine = fbm(l * 6.0 + 8.0);
-  float albedo = mix(1.0, 0.58, seas) * (0.9 + 0.2 * fine);
-  float limb = 0.75 + 0.25 * z;                                // gentle limb darkening
-  vec3 surf = vec3(0.98, 0.96, 0.9) * albedo * limb * lit + vec3(0.05, 0.06, 0.09) * albedo; // + earthshine
-  disc = smoothstep(1.0, 0.96, r);
-  return mix(halo, surf * 1.15, disc);
+  halo = vec3(0.7, 0.78, 0.98) * (exp(-r * 0.55) * 0.16 + exp(-r * 0.12) * 0.05) * (0.15 + 0.85 * illum * illum);
+  if (r > 1.0) return vec3(0.0);
+  float aa = max(fwidth(r), 1e-3);
+  disc = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r);
+  halo *= 1.0 - disc;
+  if (uMoonOverlay > 0.5) return vec3(0.0);
+  float lit;
+  vec3 surf = moonSurface(l, right, up, m, uSunDir, uMoonPhase, lit);
+  litCover = disc * lit;
+  return surf * 1.15 * disc;
 }
 
 void main() {
@@ -290,12 +296,16 @@ void main() {
   float moonIllum = 1.0 - abs(uMoonPhase - 0.5) * 2.0;
   float moonUp = smoothstep(-0.03, 0.08, uMoonDir.y);
   float moonDisc;
+  float moonLit;
+  vec3 moonHalo;
   float nightF = smoothstep(0.35, 0.95, night) * (1.0 - uOvercast * 0.9) * (1.0 - uFog * 0.8);
-  vec3 moonCol = moon(dir, moonDisc) * nightF;
+  vec3 moonCol = (moon(dir, moonDisc, moonLit, moonHalo) + moonHalo) * nightF;
+  // How much of the moon shows through what is drawn over it below (clouds, rain, fog, mist).
+  float moonVis = 1.0;
   float glare = moonIllum * moonUp * 0.75;
   vec3 st = stars(dir, glare) * smoothstep(0.78, 1.0, night) * (1.0 - max(uCloud.x * 0.6, uOvercast)) * (1.0 - uFog) * step(0.0, dir.y);
   col += st * (1.0 - moonDisc) * (1.0 - glare * exp(-(1.0 - max(muM, 0.0)) * 14.0));
-  col = col * (1.0 - moonDisc * nightF) + moonCol;
+  col = col * (1.0 - moonLit * nightF) + moonCol;
 
   // Sun: aureole, soft rays, warm low-sun band and disc, all hidden by thick cloud.
   float aureole = pow(max(mu, 0.0), 6.0) * 0.2 + pow(max(mu, 0.0), 60.0) * 0.35 + pow(max(mu, 0.0), 700.0) * 0.9;
@@ -315,10 +325,12 @@ void main() {
   float thC = mix(0.74, 0.3, uCloud.z);
   vec4 c3 = cloudLayer(dir, 6.0, uCloud.z, thC, thC + 0.3, 0.16, 0.22, 0.6, 0.0, 0.0, 0.0, uSunDir, mu);
   col = mix(col, c3.rgb * 0.92 + 0.08 * uHorizon, c3.a * 0.6);
+  moonVis *= 1.0 - c3.a * 0.6;
   float thM = mix(0.72, 0.24, uCloud.y);
   float ripple = (1.0 - uConvective) * (1.0 - uOvercast) * uCumulusW;
   vec4 c2 = cloudLayer(dir, 2.6, uCloud.y, thM, thM + 0.26, 0.42, 0.8, 1.0, uConvective, ripple, 0.4, uSunDir, mu);
   col = mix(col, c2.rgb, c2.a * 0.85);
+  moonVis *= 1.0 - c2.a * 0.85;
   // Thin cloud in front of the moon glows.
   col += vec3(0.7, 0.78, 0.98) * (c2.a * 0.5 + c3.a * 0.6) * pow(max(muM, 0.0), 40.0) * 0.5 * moonIllum * moonUp * night;
 
@@ -326,11 +338,13 @@ void main() {
   vec2 px = uCumulusTexel * 0.5; // each tap averages a 2x2 block, which cancels the march dither
   vec4 cu = (texture(uCumulus, sp + px) + texture(uCumulus, sp - px) + texture(uCumulus, sp + vec2(px.x, -px.y)) + texture(uCumulus, sp + vec2(-px.x, px.y))) * 0.25 * uCumulusW;
   col = col * (1.0 - cu.a) + cu.rgb;
+  moonVis *= 1.0 - cu.a;
   // ...and a stratus deck (lower and darker the harder it rains) otherwise.
   float base = mix(1.0, 0.72, uRain);
   float cov = uCloud.x * stratusW;
   vec4 c1 = cloudLayer(dir, base, cov, 1.0 - cov - 0.08, 1.0 - cov + 0.32, 0.75, 1.0, 1.6, uConvective, 0.0, 1.0, uSunDir, mu);
   col = mix(col, c1.rgb, c1.a * stratusW);
+  moonVis *= 1.0 - c1.a * stratusW;
   float lowA = max(c1.a * stratusW, cu.a);
 
   // Lightning lighting the cloud from within.
@@ -344,6 +358,7 @@ void main() {
     float shafts = fbm(vec2(sp.x * 9.0 - uTime * 0.02, sp.y * 0.6 + uTime * 0.4));
     float veil = uRain * (0.16 + 0.5 * exp(-max(dir.y, 0.0) * 3.2)) * (0.6 + 0.5 * curtain + 0.4 * shafts);
     col = mix(col, mix(uHorizon, uCloudShadow, 0.6), clamp(veil, 0.0, 0.85));
+    moonVis *= 1.0 - clamp(veil, 0.0, 0.85);
   }
 
   // Fog: drifting banks of varying density, with the sun or moon as a dim diffused glow.
@@ -356,18 +371,21 @@ void main() {
     fogCol += uSunColor * (pow(max(mu, 0.0), 4.0) * 0.26 + pow(max(mu, 0.0), 30.0) * 0.4 + pow(max(mu, 0.0), 220.0) * 0.45) * uDaylight;
     fogCol += vec3(0.6, 0.68, 0.9) * (pow(max(muM, 0.0), 6.0) * 0.1 + pow(max(muM, 0.0), 60.0) * 0.22) * night * moonUp * moonIllum;
     col = mix(col, fogCol, fogD);
+    moonVis *= 1.0 - fogD * 0.7;
     float thin = 1.0 - fogD * 0.55;
     col += uSunColor * smoothstep(0.9986, 0.9997, mu) * 0.4 * uFog * thin * uDaylight * (1.0 - min(1.0, uRain * 4.0));
     col += vec3(0.85, 0.88, 0.95) * moonDisc * 0.3 * uFog * thin * night;
   }
-  col = mix(col, uFogColor * 1.05 + 0.03, uMist * exp(-max(dir.y, 0.0) * 10.0) * (0.7 + 0.6 * fbm(vec2(sp.x * 3.0 + uTime * 0.02, sp.y * 8.0))));
+  float mistA = uMist * exp(-max(dir.y, 0.0) * 10.0) * (0.7 + 0.6 * fbm(vec2(sp.x * 3.0 + uTime * 0.02, sp.y * 8.0)));
+  col = mix(col, uFogColor * 1.05 + 0.03, mistA);
+  moonVis *= 1.0 - clamp(mistA, 0.0, 1.0);
 
   // Soft shoulder so the sun glow rolls off instead of clipping to white.
   col = mix(col, 0.78 + (1.0 - exp(-(col - 0.78) * 2.2)) * 0.22, step(0.78, col));
 
   // Dither to avoid banding in smooth gradients.
   col += (hash12(gl_FragCoord.xy + fract(uTime) * 100.0) - 0.5) / 255.0;
-  outColor = vec4(col, 1.0);
+  outColor = vec4(col, uMoonOverlay > 0.5 ? clamp(moonVis, 0.0, 1.0) : 1.0);
 }`
 
 /** Stateless rain streaks: every drop is derived from gl_VertexID and time. */
@@ -565,5 +583,6 @@ void main() {
     col += smoothstep(0.75, 0.95, r) * smoothstep(1.0, 0.95, r) * max(-n.y, 0.0) * m * 0.25 * luma; // lit lower rim
   }
   col += vec3(0.72, 0.78, 0.95) * uScreenFlash;
-  outColor = vec4(col, 1.0);
+  // Alpha carries the moon's visibility for a 3D scene that draws the moon itself (uMoonOverlay).
+  outColor = vec4(col, texture(uScene, uv).a);
 }`
